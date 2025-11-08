@@ -3,8 +3,9 @@ Authentication Blueprint - FIXED
 Handles user registration, login, logout, and credential management
 """
 
-from flask import Blueprint, render_template, redirect, url_for, flash, request, session
-from flask_login import login_user, logout_user, login_required, current_user
+from flask import Blueprint, request, redirect, url_for, flash, render_template
+from flask_login import login_required, current_user, login_user, logout_user
+import os
 from app.models import User, log_user_action
 from app.user_runtime import get_user_runtime_context, remove_user_runtime_context
 
@@ -151,3 +152,97 @@ def profile():
                           usage=usage,
                           files=files,
                           audit_log=audit_log)
+
+@auth.route('/zerodha/login')
+@login_required
+def zerodha_login():
+    """Redirect user to Zerodha login to get fresh access token"""
+    api_key = os.getenv('ZERODHA_API_KEY')
+    
+    if not api_key:
+        flash('Zerodha API key not configured. Please contact administrator.', 'error')
+        return redirect(url_for('auth.credentials'))
+    
+    # Build Zerodha login URL - this redirects user to Zerodha's login page
+    # After successful login, Zerodha will redirect back to our callback URL
+    callback_url = url_for('auth.zerodha_callback', _external=True)
+    zerodha_login_url = f"https://kite.zerodha.com/connect/login?v=3&api_key={api_key}"
+    
+    flash('Redirecting to Zerodha for authentication...', 'info')
+    return redirect(zerodha_login_url)
+
+
+@auth.route('/zerodha/callback')
+@login_required
+def zerodha_callback():
+    """Handle callback from Zerodha after user logs in"""
+    from app.models import log_user_action
+    from app.user_runtime import remove_user_runtime_context
+    
+    # Zerodha sends back a request_token in the URL parameters
+    request_token = request.args.get('request_token')
+    
+    # Check if there's an error from Zerodha
+    error = request.args.get('error')
+    if error:
+        flash(f'Zerodha authentication failed: {error}', 'error')
+        return redirect(url_for('auth.credentials'))
+    
+    if not request_token:
+        flash('Authorization failed. No request token received from Zerodha.', 'error')
+        return redirect(url_for('auth.credentials'))
+    
+    try:
+        # Get API credentials from environment
+        api_key = os.getenv('ZERODHA_API_KEY')
+        api_secret = os.getenv('ZERODHA_API_SECRET')
+        
+        if not api_key or not api_secret:
+            flash('API credentials not properly configured. Please contact administrator.', 'error')
+            return redirect(url_for('auth.credentials'))
+        
+        # Import KiteConnect to exchange request token for access token
+        from kiteconnect import KiteConnect
+        
+        kite = KiteConnect(api_key=api_key)
+        
+        # Exchange request token for access token
+        # This is the crucial step that gets us a valid access token
+        data = kite.generate_session(request_token, api_secret=api_secret)
+        access_token = data["access_token"]
+        
+        # Optional: Get user profile to verify the connection
+        kite.set_access_token(access_token)
+        profile = kite.profile()
+        user_name = profile.get('user_name', 'Unknown')
+        
+        # Update user's credentials in database with the new access token
+        if current_user.update_credentials(api_key, access_token):
+            flash(f'Successfully connected to Zerodha as {user_name}! Token will be valid for 24 hours.', 'success')
+            log_user_action(
+                current_user.id, 
+                'zerodha_token_refresh', 
+                f'Access token refreshed via Zerodha login for user {user_name}', 
+                request.remote_addr
+            )
+            
+            # Clear old runtime context to force recreation with new credentials
+            remove_user_runtime_context(current_user.id)
+            
+            return redirect(url_for('main.dashboard'))
+        else:
+            flash('Failed to save access token to database', 'error')
+            return redirect(url_for('auth.credentials'))
+            
+    except Exception as e:
+        error_msg = str(e)
+        flash(f'Token generation failed: {error_msg}', 'error')
+        log_user_action(
+            current_user.id, 
+            'zerodha_token_refresh_failed', 
+            f'Failed to refresh token: {error_msg}', 
+            request.remote_addr
+        )
+        return redirect(url_for('auth.credentials'))
+
+

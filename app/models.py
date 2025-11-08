@@ -4,7 +4,7 @@ Stores user credentials and session information
 """
 
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Dict, Any
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -33,9 +33,16 @@ def init_user_db():
                 is_active INTEGER DEFAULT 1,
                 quota_symbols INTEGER DEFAULT 500,
                 quota_parallel_jobs INTEGER DEFAULT 2,
-                max_file_size_mb INTEGER DEFAULT 100
+                max_file_size_mb INTEGER DEFAULT 100,
+                token_expires_at TIMESTAMP
             )
         """)
+        
+        # Add token_expires_at column if it doesn't exist (for existing databases)
+        try:
+            conn.execute("ALTER TABLE users ADD COLUMN token_expires_at TIMESTAMP")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
         
         conn.execute("""
             CREATE TABLE IF NOT EXISTS user_sessions (
@@ -81,7 +88,8 @@ class User(UserMixin):
                  is_active: bool = True,
                  quota_symbols: int = 500,
                  quota_parallel_jobs: int = 2,
-                 max_file_size_mb: int = 100):
+                 max_file_size_mb: int = 100,
+                 token_expires_at: Optional[datetime] = None):
         self.id = user_id
         self.username = username
         self.email = email
@@ -93,6 +101,7 @@ class User(UserMixin):
         self.quota_symbols = quota_symbols
         self.quota_parallel_jobs = quota_parallel_jobs
         self.max_file_size_mb = max_file_size_mb
+        self.token_expires_at = token_expires_at
     
     def get_id(self):
         """Required by Flask-Login"""
@@ -167,7 +176,7 @@ class User(UserMixin):
             cursor = conn.execute("""
                 SELECT id, username, email, encrypted_api_key, encrypted_access_token,
                        created_at, last_active, is_active, quota_symbols, 
-                       quota_parallel_jobs, max_file_size_mb
+                       quota_parallel_jobs, max_file_size_mb, token_expires_at
                 FROM users WHERE id = ?
             """, (user_id,))
             
@@ -184,7 +193,8 @@ class User(UserMixin):
                     is_active=bool(row[7]),
                     quota_symbols=row[8],
                     quota_parallel_jobs=row[9],
-                    max_file_size_mb=row[10]
+                    max_file_size_mb=row[10],
+                    token_expires_at=datetime.fromisoformat(row[11]) if row[11] else None
                 )
             return None
         finally:
@@ -198,7 +208,7 @@ class User(UserMixin):
             cursor = conn.execute("""
                 SELECT id, username, email, encrypted_api_key, encrypted_access_token,
                        created_at, last_active, is_active, quota_symbols,
-                       quota_parallel_jobs, max_file_size_mb
+                       quota_parallel_jobs, max_file_size_mb, token_expires_at
                 FROM users WHERE username = ?
             """, (username,))
             
@@ -215,7 +225,8 @@ class User(UserMixin):
                     is_active=bool(row[7]),
                     quota_symbols=row[8],
                     quota_parallel_jobs=row[9],
-                    max_file_size_mb=row[10]
+                    max_file_size_mb=row[10],
+                    token_expires_at=datetime.fromisoformat(row[11]) if row[11] else None
                 )
             return None
         finally:
@@ -240,33 +251,53 @@ class User(UserMixin):
         finally:
             conn.close()
     
-    def update_credentials(self, api_key: str, access_token: str) -> bool:
-        """Update user's Zerodha credentials (encrypted)"""
+    def update_credentials(self, api_key, access_token):
+        """Update API credentials with expiry tracking"""
         from app.secrets import encrypt_credential
         
-        conn = sqlite3.connect(str(USER_DB_PATH))
         try:
-            encrypted_api = encrypt_credential(api_key)
-            encrypted_token = encrypt_credential(access_token)
+            encrypted_api = encrypt_credential(api_key) if api_key else None
+            encrypted_token = encrypt_credential(access_token) if access_token else None
             
-            conn.execute("""
-                UPDATE users 
-                SET encrypted_api_key = ?, encrypted_access_token = ?
-                WHERE id = ?
-            """, (encrypted_api, encrypted_token, self.id))
+            # Set token expiry to 24 hours from now
+            token_expires_at = datetime.utcnow() + timedelta(hours=24)
             
-            conn.commit()
-            
-            self.encrypted_api_key = encrypted_api
-            self.encrypted_access_token = encrypted_token
-            
-            log_user_action(self.id, 'credentials_updated', 'API credentials updated')
-            return True
-        except Exception:
+            conn = sqlite3.connect(str(USER_DB_PATH))
+            try:
+                conn.execute("""
+                    UPDATE users 
+                    SET encrypted_api_key = ?, encrypted_access_token = ?, token_expires_at = ?
+                    WHERE id = ?
+                """, (encrypted_api, encrypted_token, token_expires_at.isoformat(), self.id))
+                conn.commit()
+                
+                # Update instance variables
+                self.encrypted_api_key = encrypted_api
+                self.encrypted_access_token = encrypted_token
+                self.token_expires_at = token_expires_at
+                
+                return True
+            finally:
+                conn.close()
+        except Exception as e:
+            print(f"Error updating credentials: {e}")
             return False
-        finally:
-            conn.close()
     
+    def is_token_expired(self):
+        """Check if access token has expired"""
+        if not self.token_expires_at:
+            return True  # No expiry set means no valid token
+        
+        return datetime.utcnow() >= self.token_expires_at
+
+    def get_token_expiry_hours(self):
+        """Get hours until token expires (negative if already expired)"""
+        if not self.token_expires_at:
+            return None
+        
+        delta = self.token_expires_at - datetime.utcnow()
+        return delta.total_seconds() / 3600
+
     def get_credentials(self) -> tuple[Optional[str], Optional[str]]:
         """Get decrypted credentials (API key, Access token)"""
         from app.secrets import decrypt_credential
