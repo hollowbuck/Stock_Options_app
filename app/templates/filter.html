@@ -1,0 +1,280 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-10">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+          <h4 class="mb-0">Filter Processor</h4>
+          <small class="text-muted">Run enhanced filter on Options_Data.db</small>
+        </div>
+        <div>
+          <a href="{{ url_for('main.download_filter_output') }}" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-download"></i> Download Excel (with formatting)
+          </a>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="mb-3">
+          <button class="btn btn-success" id="runBtn" onclick="runFilter()" {% if status.is_running %}disabled{% endif %}>
+            <i class="bi bi-play"></i> Run Filter
+          </button>
+        </div>
+
+        <div class="row mb-4">
+          <div class="col-md-3">
+            <div class="text-center">
+              <h6>Status</h6>
+              {% if status.is_running %}
+              <span class="badge bg-warning">Running</span>
+              {% else %}
+              <span class="badge bg-secondary">Idle</span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="text-center">
+              <h6>Progress</h6>
+              <span id="progressVal">{{ status.progress or 0 }}%</span>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="text-center">
+              <h6>Started</h6>
+              <span id="startedVal">{% if status.start_time %}{{ status.start_time.strftime('%Y-%m-%d %H:%M:%S') }}{% else %}-{% endif %}</span>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="text-center">
+              <h6>Output</h6>
+              <span id="outputVal">{{ status.output_file or '-' }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">Logs</div>
+          <div class="card-body" style="height: 250px; overflow-y: auto;" id="logBox">
+            {% for m in status.messages %}
+              <div class="small text-muted">{{ m }}</div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="mt-3" id="summaryBox">
+          {% if status.summary %}
+          <div class="alert alert-info">
+            <strong>Summary:</strong>
+            <div class="small">Sheets: {{ status.summary.processed_sheets }}/{{ status.summary.total_sheets }}, Rows: {{ status.summary.total_rows }}, Total time: {{ '%.2f'|format(status.summary.total_time) }}s</div>
+            <div class="small">Filtered: {{ status.summary.filtered_records }}, HighYield: {{ status.summary.high_yield_records }}</div>
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- Results Tables (preview) -->
+        <div class="mt-4" id="tablesContainer">
+          {% if status.tables %}
+            <style>
+              /* Conditional formatting for filter results */
+              .cell-light-red { 
+                background-color: #FFB3BA !important; 
+                font-weight: 600;
+                color: #000 !important;
+              }
+              .cell-green { 
+                background-color: #BAE1A8 !important; 
+                font-weight: 600;
+                color: #000 !important;
+              }
+              .cell-light-green { 
+                background-color: #7FD87F !important; 
+                font-weight: 600;
+                color: #000 !important;
+              }
+              /* Ensure table cells respect the background colors */
+              #tablesContainer table td {
+                padding: 0.4rem !important;
+              }
+            </style>
+            {% for sheet, table in status.tables.items() %}
+            <div class="card mb-3">
+              <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                  <strong>{{ sheet }}</strong>
+                  <small class="text-muted">preview (first {{ table.rows|length }} rows)</small>
+                </div>
+              </div>
+              <div class="card-body p-0">
+                <div class="table-responsive">
+                  <table class="table table-sm mb-0">
+                    <thead class="table-light">
+                      <tr>
+                        {% for col in table.columns %}
+                          <th>{{ col }}</th>
+                        {% endfor %}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for row_idx in range(table.rows|length) %}
+                      {% set row = table.rows[row_idx] %}
+                      {% set row_classes = table.classes[row_idx] if table.classes is defined else {} %}
+                      <tr>
+                        {% for col in table.columns %}
+                          {% set cls = row_classes.get(col, '') %}
+                          <td class="{{ cls }}"><small>{{ row[col] }}</small></td>
+                        {% endfor %}
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          {% endif %}
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let statusTimer = null;
+let isPolling = false;
+
+function startPolling(intervalMs = 2000) {
+  stopPolling();
+  statusTimer = setInterval(refreshFilterStatus, intervalMs);
+  isPolling = true;
+}
+
+function stopPolling() {
+  if (statusTimer) clearInterval(statusTimer);
+  statusTimer = null;
+  isPolling = false;
+}
+
+function runFilter() {
+  document.getElementById('runBtn').disabled = true;
+  fetch("{{ url_for('main.filter_page') }}", { method: 'POST' })
+    .then(() => {
+      startPolling(2000);
+      refreshFilterStatus();
+    });
+}
+
+function refreshFilterStatus() {
+  fetch("{{ url_for('main.filter_status_api') }}")
+    .then(r => r.json())
+    .then(st => {
+      document.getElementById('progressVal').textContent = (st.progress || 0) + '%';
+      document.getElementById('outputVal').textContent = st.output_file || '-';
+      const logBox = document.getElementById('logBox');
+      logBox.innerHTML = (st.messages || []).map(m => `<div class="small text-muted">${m}</div>`).join('');
+      if (!st.is_running && st.progress === 100) {
+        stopPolling();
+        // Show summary
+        if (st.summary) {
+          const s = st.summary;
+          document.getElementById('summaryBox').innerHTML = `
+            <div class="alert alert-info">
+              <strong>Summary:</strong>
+              <div class="small">Sheets: ${s.processed_sheets}/${s.total_sheets}, Rows: ${s.total_rows}, Total time: ${s.total_time.toFixed(2)}s</div>
+              <div class="small">Filtered: ${s.filtered_records}, HighYield: ${s.high_yield_records}</div>
+            </div>`;
+        }
+        // Render tables with conditional formatting
+        if (st.tables) {
+          const container = document.getElementById('tablesContainer');
+          let html = '<style>.cell-light-red { background-color: #FFB3BA !important; font-weight: 600; color: #000 !important; } .cell-green { background-color: #BAE1A8 !important; font-weight: 600; color: #000 !important; } .cell-light-green { background-color: #7FD87F !important; font-weight: 600; color: #000 !important; }</style>';
+          Object.keys(st.tables).forEach(sheet => {
+            const table = st.tables[sheet];
+            html += `
+              <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                  <div>
+                    <strong>${sheet}</strong>
+                    <small class="text-muted">preview (first ${table.rows.length} rows)</small>
+                  </div>
+                </div>
+                <div class="card-body p-0">
+                  <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                      <thead class="table-light">
+                        <tr>
+                          ${table.columns.map(c => `<th>${c}</th>`).join('')}
+                        </tr>
+                      </thead>
+                      <tbody>`;
+            // Render each row with cell classes
+            table.rows.forEach((row, idx) => {
+              const row_classes = table.classes ? table.classes[idx] : {};
+              html += '<tr>';
+              table.columns.forEach(col => {
+                const cell_class = row_classes[col] || '';
+                const cell_value = row[col] ?? '';
+                html += `<td class="${cell_class}"><small>${cell_value}</small></td>`;
+              });
+              html += '</tr>';
+            });
+            html += `
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>`;
+          });
+          container.innerHTML = html;
+        }
+        document.getElementById('runBtn').disabled = false;
+      }
+    })
+    .catch(() => {});
+}
+
+// Handle tab visibility/focus to keep polling reliable even after tab switches
+document.addEventListener('visibilitychange', function() {
+  if (document.hidden) {
+    // Pause to avoid throttled timers
+    stopPolling();
+  } else {
+    // Resume immediately when tab becomes visible
+    refreshFilterStatus();
+    startPolling(2000);
+  }
+});
+
+window.addEventListener('focus', () => {
+  // Ensure we fetch immediately on focus
+  refreshFilterStatus();
+  if (!isPolling) startPolling(2000);
+});
+
+window.addEventListener('blur', () => {
+  // Optionally slow down or pause while unfocused
+  stopPolling();
+});
+
+window.addEventListener('online', () => {
+  // Resume when connection is back
+  refreshFilterStatus();
+  if (!isPolling) startPolling(2000);
+});
+
+window.addEventListener('offline', () => {
+  // Pause polling while offline
+  stopPolling();
+});
+
+// Kick off polling on initial load so we pick up an already-running job
+document.addEventListener('DOMContentLoaded', function() {
+  refreshFilterStatus();
+  startPolling(2000);
+});
+</script>
+
+{% endblock %}
+
+

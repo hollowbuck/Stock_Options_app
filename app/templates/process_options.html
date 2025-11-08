@@ -1,0 +1,195 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-10">
+    <div class="card">
+      <div class="card-header">
+        <h4 class="mb-0">Process Options Data</h4>
+        <small class="text-muted">Configure symbols and process options chain data</small>
+      </div>
+      <div class="card-body">
+        
+        <!-- Current Settings Display -->
+        <div class="row mb-4">
+          <div class="col-md-6">
+            <div class="alert alert-info">
+              <strong>Selected Expiry:</strong> 
+              {% if selected_expiry %}
+                {{ selected_expiry }}
+              {% else %}
+                <span class="text-warning">Not selected</span>
+                <br><small><a href="{{ url_for('main.select_expiry') }}">Select expiry first</a></small>
+              {% endif %}
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="alert alert-secondary">
+              <strong>Default Symbol:</strong> {{ selected_symbol or 'RELIANCE' }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Processing Form -->
+        <form method="post" id="processForm" enctype="multipart/form-data">
+          
+          <!-- Default Symbols Quick Action -->
+          <div class="mb-3">
+            <label class="form-label"><strong>Quick Options</strong></label>
+            <div class="btn-group" role="group" aria-label="Quick symbol selection">
+              <button type="button" class="btn btn-outline-primary" onclick="loadDefaultSymbols()">
+                <i class="bi bi-stars"></i> Load Default Symbols (150+ stocks)
+              </button>
+              <button type="button" class="btn btn-outline-secondary" onclick="clearSymbols()">
+                <i class="bi bi-x-circle"></i> Clear
+              </button>
+            </div>
+            <div class="form-text mt-2">
+              <span class="badge bg-primary">Default Symbols</span> - Pre-configured list of 150+ liquid F&O stocks.
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label for="symbols" class="form-label">
+              <strong>Symbols to Process</strong>
+              <small class="text-muted">(comma-separated)</small>
+            </label>
+            <textarea class="form-control" id="symbols" name="symbols" rows="5" 
+                      placeholder="RELIANCE, TCS, INFY, HDFC, ICICIBANK" required>{{ selected_symbol or 'RELIANCE' }}</textarea>
+            <div class="form-text">
+              Enter stock symbols separated by commas, or use the default symbols list above. Each symbol will be validated for F&O availability.
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label for="symbols_file" class="form-label">
+              <strong>Or Upload Excel (.xlsx)</strong>
+            </label>
+            <input class="form-control" type="file" id="symbols_file" name="symbols_file" accept=".xlsx,.xls">
+            <div class="form-text">
+              Upload a file like <code>Main_List.xlsx</code> with a <strong>Symbol</strong> column. Selected expiry applies to all.
+            </div>
+          </div>
+
+          <div class="row mb-3">
+            <div class="col-md-6">
+              <div class="card bg-light">
+                <div class="card-body">
+                  <h6 class="card-title">Processing Options:</h6>
+                  <ul class="list-unstyled mb-0">
+                    <li><i class="bi bi-check-circle text-success"></i> Fetch Current Market Prices (CMP)</li>
+                    <li><i class="bi bi-check-circle text-success"></i> Validate F&O Availability</li>
+                    <li><i class="bi bi-check-circle text-success"></i> Generate Options Chain Data</li>
+                    <li><i class="bi bi-check-circle text-success"></i> Calculate Bid/Ask Spreads</li>
+                    <li><i class="bi bi-check-circle text-success"></i> Fetch Margin Requirements</li>
+                    <li><i class="bi bi-check-circle text-success"></i> Export to Excel with Formula Preservation</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="card bg-light">
+                <div class="card-body">
+                  <h6 class="card-title">Output Information:</h6>
+                  <ul class="list-unstyled mb-0">
+                    <li><strong>Excel File:</strong> Options_Data.xlsx</li>
+                    <li><strong>Sheets:</strong> One per symbol</li>
+                    <li><strong>Data Columns:</strong> Symbol, CMP, Strike, BidPrice, AskPrice, LTP, etc.</li>
+                    <li><strong>Formula Support:</strong> Your existing formulas will be preserved</li>
+                    <li><strong>Real-time Updates:</strong> Available after initial processing</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+            <a href="{{ url_for('main.select_expiry') }}" class="btn btn-secondary">
+              <i class="bi bi-arrow-left"></i> Change Expiry
+            </a>
+            <button type="submit" class="btn btn-success" 
+                    {% if not selected_expiry %}disabled{% endif %}>
+              <i class="bi bi-play-fill"></i> Start Processing
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.getElementById('processForm').addEventListener('submit', function(e) {
+  const button = e.target.querySelector('button[type="submit"]');
+  button.innerHTML = '<i class="bi bi-hourglass-split"></i> Starting...';
+  button.disabled = true;
+});
+
+// Default symbols list - 150+ liquid F&O stocks
+const DEFAULT_SYMBOLS = [
+  "ADANIENSOL", "ADANIENT", "ADANIGREEN", "ADANIPORTS", "AMBUJACEM", "ASHOKLEY",
+  "ASIANPAINT", "ASTRAL", "AXISBANK", "BAJAJ-AUTO", "BAJAJFINSV", "BAJFINANCE",
+  "BANKBARODA", "BDL", "BEL", "BHARATFORG", "BHARTIARTL", "BHEL", "BPCL", "BRITANNIA",
+  "BSE", "CAMS", "CANBK", "CDSL", "CGPOWER", "CHOLAFIN", "CIPLA", "COALINDIA",
+  "COFORGE", "COLPAL", "CROMPTON", "CUMMINSIND", "DABUR", "DALBHARAT", "DELHIVERY",
+  "DIVISLAB", "DIXON", "DLF", "DMART", "EICHERMOT", "ETERNAL", "EXIDEIND", "GAIL",
+  "GLENMARK", "GMRAIRPORT", "GODREJCP", "GODREJPROP", "HAL", "HAVELLS", "HCLTECH",
+  "HDFCBANK", "HDFCLIFE", "HEROMOTOCO", "HFCL", "HINDALCO", "HINDPETRO", "HINDUNILVR",
+  "HINDZINC", "HUDCO", "ICICIBANK", "ICICIPRULI", "IDFCFIRSTB", "IEX", "IGL", "INDHOTEL",
+  "INDIANB", "INDIGO", "INDUSINDBK", "INDUSTOWER", "INFY", "IOC", "IRCTC", "IREDA", "IRFC",
+  "ITC", "JINDALSTEL", "JIOFIN", "JSWSTEEL", "KALYANKJIL", "KAYNES", "KFINTECH", "KOTAKBANK",
+  "LAURUSLABS", "LICI", "LT", "LTF", "M&M", "MANAPPURAM", "MARUTI", "MAZDOCK", "MCX",
+  "MOTHERSON", "MPHASIS", "MUTHOOTFIN", "NATIONALUM", "NCC", "NESTLEIND", "NHPC", "NIFTY",
+  "NTPC", "NYKAA", "ONGC", "PAYTM", "PERSISTENT", "PETRONET", "PFC", "PGEL", "PNB",
+  "PNBHOUSING", "POLICYBZR", "POLYCAB", "POWERGRID", "PPLPHARMA", "PRESTIGE", "RBLBANK",
+  "RECLTD", "RELIANCE", "RVNL", "SAIL", "SBICARD", "SBILIFE", "SBIN", "SHREECEM",
+  "SHRIRAMFIN", "SIEMENS", "SOLARINDS", "SONACOMS", "SUNPHARMA", "SUPREMEIND", "SUZLON",
+  "TATACONSUM", "TATAELXSI", "TMPV", "TATAPOWER", "TATASTEEL", "TCS", "TECHM", "TIINDIA",
+  "TITAGARH", "TITAN", "TORNTPHARM", "TORNTPOWER", "TRENT", "TVSMOTOR", "ULTRACEMCO",
+  "UNIONBANK", "UNITDSPR", "UNOMINDA", "UPL", "VBL", "VEDL", "VOLTAS", "WIPRO",
+  "YESBANK", "ZYDUSLIFE"
+];
+
+function loadDefaultSymbols() {
+  const textarea = document.getElementById('symbols');
+  const symbolsText = DEFAULT_SYMBOLS.join(', ');
+  textarea.value = symbolsText;
+  
+  // Show success notification
+  const notification = document.createElement('div');
+  notification.className = 'alert alert-success alert-dismissible fade show mt-2';
+  notification.innerHTML = `
+    <i class="bi bi-check-circle-fill"></i> 
+    Loaded ${DEFAULT_SYMBOLS.length} default symbols into the form.
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  `;
+  document.querySelector('.mb-3').after(notification);
+  
+  // Auto-dismiss after 3 seconds
+  setTimeout(() => {
+    notification.remove();
+  }, 3000);
+}
+
+function clearSymbols() {
+  const textarea = document.getElementById('symbols');
+  textarea.value = '';
+  
+  // Show notification
+  const notification = document.createElement('div');
+  notification.className = 'alert alert-info alert-dismissible fade show mt-2';
+  notification.innerHTML = `
+    <i class="bi bi-info-circle-fill"></i> 
+    Cleared symbol list.
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  `;
+  document.querySelector('.mb-3').after(notification);
+  
+  // Auto-dismiss after 2 seconds
+  setTimeout(() => {
+    notification.remove();
+  }, 2000);
+}
+</script>
+
+{% endblock %}

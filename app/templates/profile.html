@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-4">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-person-circle"></i> User Profile</h5>
+      </div>
+      <div class="card-body">
+        <p><strong>Username:</strong> {{ current_user.username }}</p>
+        <p><strong>Email:</strong> {{ current_user.email or 'Not set' }}</p>
+        <p><strong>User ID:</strong> {{ current_user.id }}</p>
+        <p><strong>Created:</strong> {{ current_user.created_at.strftime('%Y-%m-%d') if current_user.created_at else 'N/A' }}</p>
+        <p><strong>Last Active:</strong> {{ current_user.last_active.strftime('%Y-%m-%d %H:%M') if current_user.last_active else 'N/A' }}</p>
+        
+        <hr>
+        
+        <div class="d-grid gap-2">
+          <a href="{{ url_for('auth.credentials') }}" class="btn btn-primary btn-sm">
+            <i class="bi bi-key"></i> Manage Credentials
+          </a>
+          <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-danger btn-sm">
+            <i class="bi bi-box-arrow-right"></i> Logout
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="col-md-8">
+    <div class="card mb-3">
+      <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-hdd"></i> Workspace Usage</h5>
+      </div>
+      <div class="card-body">
+        <div class="row text-center">
+          <div class="col-md-4">
+            <h6>Total</h6>
+            <p class="fs-5">{{ "%.2f"|format(usage['total_bytes']) if usage and 'total_bytes' in usage else '0.00' }} MB</p>
+          </div>
+          <div class="col-md-4">
+            <h6>Processed</h6>
+            <p class="fs-5">{{ "%.2f"|format(usage['processed_options_bytes']) if usage and 'processed_options_bytes' in usage else '0.00' }} MB</p>
+          </div>
+          <div class="col-md-4">
+            <h6>Filtered</h6>
+            <p class="fs-5">{{ "%.2f"|format(usage['filtered_options_bytes']) if usage and 'filtered_options_bytes' in usage else '0.00' }} MB</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="card mb-3">
+      <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-files"></i> Recent Files</h5>
+      </div>
+      <div class="card-body">
+        {% if files %}
+        <div class="table-responsive">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>Filename</th>
+                <th>Size</th>
+                <th>Modified</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for file in files[:10] %}
+              <tr>
+                <td><small>{{ file.filename }}</small></td>
+                <td><small>{{ "%.2f"|format(file.size_mb) }} MB</small></td>
+                <td><small>{{ file.modified }}</small></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <p class="text-muted">No files yet</p>
+        {% endif %}
+      </div>
+    </div>
+    
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-clock-history"></i> Activity Log</h5>
+      </div>
+      <div class="card-body">
+        {% if audit_log %}
+        <div style="max-height: 300px; overflow-y: auto;">
+          {% for log in audit_log %}
+          <div class="border-bottom py-2">
+            <strong>{{ log['action'] }}</strong>
+            <br><small class="text-muted">{{ log['details'] or '' }}</small>
+            <br><small class="text-muted">{{ log['timestamp'] }} - {{ log['ip_address'] or '' }}</small>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted">No activity logged</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

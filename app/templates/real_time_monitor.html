@@ -1,0 +1,585 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-10">
+    <div class="card">
+      <div class="card-header">
+        <h4 class="mb-0">Real-time Market Monitor</h4>
+        <small class="text-muted">Live tracking of symbol prices and market data</small>
+      </div>
+      <div class="card-body">
+        
+        <!-- Control Panel -->
+<div class="row mb-4">
+  <div class="col-md-6">
+            <div class="input-group">
+              <input type="text" class="form-control" id="symbolInput" 
+                     placeholder="Enter symbols (comma-separated): RELIANCE, TCS, INFY">
+              <button class="btn btn-primary" onclick="addSymbols()">
+                <i class="bi bi-plus"></i> Add Symbols
+              </button>
+            </div>
+          </div>
+  <div class="col-md-6">
+            <div class="btn-group w-100" role="group">
+              <button class="btn btn-success" onclick="startMonitoring()" id="startBtn">
+                <i class="bi bi-play-fill"></i> Start
+              </button>
+              <button class="btn btn-warning" onclick="startFilteredMonitoring()" id="startFilteredBtn">
+                <i class="bi bi-funnel-fill"></i> Monitor Filtered
+              </button>
+              <button class="btn btn-danger" onclick="stopMonitoring()" id="stopBtn" disabled>
+                <i class="bi bi-stop-fill"></i> Stop
+              </button>
+              <button class="btn btn-info" onclick="clearAll()">
+                <i class="bi bi-trash"></i> Clear
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Status Bar -->
+        <div class="alert alert-secondary" role="alert" id="statusBar">
+          <div class="row">
+            <div class="col-md-3">
+              <strong>Status:</strong> <span id="monitorStatus">Stopped</span>
+            </div>
+            <div class="col-md-3">
+              <strong>Symbols:</strong> <span id="symbolCount">0</span>
+            </div>
+            <div class="col-md-3">
+              <strong>Last Update:</strong> <span id="lastUpdate">Never</span>
+            </div>
+            <div class="col-md-3">
+              <strong>Refresh Rate:</strong> <span id="refreshRate">10s</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Symbols Grid -->
+        <div id="symbolsGrid" class="row g-3"></div>
+
+        <!-- Contracts Tables -->
+        <div id="contractsContainer" class="mt-4"></div>
+
+        <!-- Empty State -->
+        <div id="emptyState" class="text-center py-5">
+          <i class="bi bi-graph-up display-1 text-muted"></i>
+          <h3 class="mt-3 text-muted">Real-time Monitor</h3>
+          <p class="text-muted">Add symbols above to start monitoring live market data</p>
+          <button class="btn btn-outline-primary" onclick="addSampleSymbols()">
+            <i class="bi bi-lightning"></i> Add Sample Symbols
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal fade" id="settingsModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Monitor Settings</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label for="refreshInterval" class="form-label">Refresh Interval (seconds)</label>
+          <select class="form-select" id="refreshInterval">
+            <option value="5">5 seconds</option>
+            <option value="10" selected>10 seconds</option>
+            <option value="30">30 seconds</option>
+            <option value="60">1 minute</option>
+          </select>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="autoRefresh" checked>
+          <label class="form-check-label" for="autoRefresh">
+            Auto-refresh when data changes
+          </label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="soundNotifications">
+          <label class="form-check-label" for="soundNotifications">
+            Sound notifications for price changes
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" onclick="applySettings()" data-bs-dismiss="modal">Apply</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Settings Button (Fixed Position) -->
+<button class="btn btn-outline-secondary position-fixed" 
+        style="bottom: 20px; right: 20px; z-index: 1000;"
+        data-bs-toggle="modal" data-bs-target="#settingsModal">
+  <i class="bi bi-gear"></i>
+</button>
+
+<script>
+let monitoringInterval = null;
+let symbols = [];
+let isMonitoring = false;
+let refreshRate = 10000; // 10 seconds default
+
+function addSymbols() {
+  const input = document.getElementById('symbolInput');
+  const newSymbols = input.value.split(',')
+    .map(s => s.trim().toUpperCase())
+    .filter(s => s && !symbols.includes(s));
+  
+  symbols = [...symbols, ...newSymbols];
+  input.value = '';
+  
+  updateSymbolsGrid();
+  updateStatus();
+  hideEmptyState();
+}
+
+function addSampleSymbols() {
+  const sampleSymbols = ['RELIANCE', 'TCS', 'INFY', 'HDFC', 'ICICIBANK', 'HDFCBANK'];
+  symbols = [...new Set([...symbols, ...sampleSymbols])];
+  
+  updateSymbolsGrid();
+  updateStatus();
+  hideEmptyState();
+}
+
+function removeSymbol(symbol) {
+  symbols = symbols.filter(s => s !== symbol);
+  updateSymbolsGrid();
+  updateStatus();
+  
+  if (symbols.length === 0) {
+    showEmptyState();
+  }
+}
+
+function updateSymbolsGrid() {
+  const grid = document.getElementById('symbolsGrid');
+  grid.innerHTML = '';
+  
+  symbols.forEach(symbol => {
+    const card = createSymbolCard(symbol);
+    grid.appendChild(card);
+  });
+}
+
+function createSymbolCard(symbol) {
+  const col = document.createElement('div');
+  col.className = 'col-md-4 col-lg-3';
+  
+  col.innerHTML = `
+    <div class="card symbol-card" id="card-${symbol}">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>${symbol}</strong>
+        <button class="btn btn-sm btn-outline-danger" onclick="removeSymbol('${symbol}')">
+          <i class="bi bi-x"></i>
+        </button>
+      </div>
+      <div class="card-body">
+        <div class="d-flex justify-content-between">
+          <span>Price:</span>
+          <span id="price-${symbol}" class="fw-bold">-</span>
+        </div>
+        <div class="d-flex justify-content-between">
+          <span>F&O:</span>
+          <span id="fo-${symbol}">-</span>
+        </div>
+        <div class="text-muted small">
+          <div>Last: <span id="time-${symbol}">-</span></div>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  return col;
+}
+
+function startMonitoring() {
+  if (symbols.length === 0) {
+    alert('Please add symbols first');
+    return;
+  }
+  
+  isMonitoring = true;
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('stopBtn').disabled = false;
+  document.getElementById('monitorStatus').textContent = 'Running';
+  document.getElementById('monitorStatus').className = 'text-success';
+
+  // Tell backend to start monitoring these symbols (from last processed contracts)
+  fetch('{{ url_for('main.api_monitor_start') }}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ symbols })
+  }).then(() => {
+    // Initial fetch
+    fetchAllSymbolData();
+    // Set up interval for contract updates
+    monitoringInterval = setInterval(fetchAllSymbolData, refreshRate);
+  });
+}
+
+function startFilteredMonitoring() {
+  isMonitoring = true;
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('startFilteredBtn').disabled = true;
+  document.getElementById('stopBtn').disabled = false;
+  document.getElementById('monitorStatus').textContent = 'Running (Filtered)';
+  document.getElementById('monitorStatus').className = 'text-warning';
+
+  // Tell backend to start monitoring symbols from filter results
+  fetch('{{ url_for('main.api_monitor_start_filtered') }}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  }).then(r => r.json()).then(data => {
+    if (data.error) {
+      alert('Error: ' + data.error);
+      stopMonitoring();
+      return;
+    }
+    document.getElementById('monitorStatus').textContent = `Running (${data.total_symbols} filtered symbols)`;
+    
+    // Display filtered contracts
+    displayFilteredContracts(data.filtered_contracts);
+    
+    // Initial fetch
+    fetchAllSymbolData();
+    // Set up interval for contract updates (5 minutes = 300000ms)
+    monitoringInterval = setInterval(fetchAllSymbolData, 300000);
+  }).catch(e => {
+    console.error('Filtered monitoring error:', e);
+    alert('Failed to start filtered monitoring');
+    stopMonitoring();
+  });
+}
+
+function displayFilteredContracts(filteredContracts) {
+  const container = document.getElementById('contractsContainer');
+  container.innerHTML = '';
+  
+  // Display Filtered contracts
+  if (filteredContracts.filtered && filteredContracts.filtered.length > 0) {
+    const filteredCard = document.createElement('div');
+    filteredCard.className = 'card mb-3';
+    filteredCard.innerHTML = `
+      <div class="card-header bg-warning text-dark">
+        <h5 class="mb-0"><i class="bi bi-funnel-fill"></i> Filtered Contracts (${filteredContracts.filtered.length})</h5>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Symbol</th>
+                <th>CMP</th>
+                <th>Option Type</th>
+                <th>Strike Price</th>
+                <th>Bid Price</th>
+                <th>Yield</th>
+                <th>Dist %</th>
+                <th>Days Left</th>
+                <th>Prem/Day</th>
+                <th>Prem Until Expiry</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filteredContracts.filtered.map(contract => `
+                <tr>
+                  <td><strong>${contract.Symbol || ''}</strong></td>
+                  <td>₹${contract.CMP || 0}</td>
+                  <td>${contract.OptionType || ''}</td>
+                  <td>₹${contract.StrikePrice || 0}</td>
+                  <td>₹${contract.BidPrice || 0}</td>
+                  <td class="text-success"><strong>₹${contract.Yield || 0}</strong></td>
+                  <td>${((contract['Dist %'] || 0) * 100).toFixed(2)}%</td>
+                  <td>${contract['Days Left'] || 0}</td>
+                  <td>₹${contract['Prem/Day'] || 0}</td>
+                  <td>₹${contract['Prem Until Expiry'] || 0}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+    container.appendChild(filteredCard);
+  }
+  
+  // Display High Yield contracts
+  if (filteredContracts.high_yield && filteredContracts.high_yield.length > 0) {
+    const highYieldCard = document.createElement('div');
+    highYieldCard.className = 'card mb-3';
+    highYieldCard.innerHTML = `
+      <div class="card-header bg-success text-white">
+        <h5 class="mb-0"><i class="bi bi-star-fill"></i> High Yield Contracts (${filteredContracts.high_yield.length})</h5>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Symbol</th>
+                <th>CMP</th>
+                <th>Option Type</th>
+                <th>Strike Price</th>
+                <th>Bid Price</th>
+                <th>Yield</th>
+                <th>Dist %</th>
+                <th>Days Left</th>
+                <th>Prem/Day</th>
+                <th>Prem Until Expiry</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filteredContracts.high_yield.map(contract => `
+                <tr>
+                  <td><strong>${contract.Symbol || ''}</strong></td>
+                  <td>₹${contract.CMP || 0}</td>
+                  <td>${contract.OptionType || ''}</td>
+                  <td>₹${contract.StrikePrice || 0}</td>
+                  <td>₹${contract.BidPrice || 0}</td>
+                  <td class="text-success"><strong>₹${contract.Yield || 0}</strong></td>
+                  <td>${((contract['Dist %'] || 0) * 100).toFixed(2)}%</td>
+                  <td>${contract['Days Left'] || 0}</td>
+                  <td>₹${contract['Prem/Day'] || 0}</td>
+                  <td>₹${contract['Prem Until Expiry'] || 0}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+    container.appendChild(highYieldCard);
+  }
+}
+
+function stopMonitoring() {
+  isMonitoring = false;
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('startFilteredBtn').disabled = false;
+  document.getElementById('stopBtn').disabled = true;
+  document.getElementById('monitorStatus').textContent = 'Stopped';
+  document.getElementById('monitorStatus').className = 'text-danger';
+  
+  if (monitoringInterval) {
+    clearInterval(monitoringInterval);
+    monitoringInterval = null;
+  }
+}
+
+function clearAll() {
+  stopMonitoring();
+  symbols = [];
+  updateSymbolsGrid();
+  updateStatus();
+  showEmptyState();
+}
+
+function fetchAllSymbolData() {
+  // Fetch latest contract data for monitored symbols
+  fetch('{{ url_for('main.api_monitor_data') }}')
+    .then(r => r.json())
+    .then(payload => {
+      const data = payload.data || {};
+      renderContracts(data);
+      // Also update the summary cards with CMP via existing endpoint
+      symbols.forEach(symbol => fetchSymbolData(symbol));
+      document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+    })
+    .catch(() => {});
+}
+
+function fetchSymbolData(symbol) {
+  fetch(`{{ url_for('main.api_symbol_data', symbol='PLACEHOLDER') }}`.replace('PLACEHOLDER', symbol))
+    .then(response => response.json())
+    .then(data => {
+      updateSymbolCard(symbol, data);
+    })
+    .catch(error => {
+      console.error(`Error fetching data for ${symbol}:`, error);
+      updateSymbolCard(symbol, { error: error.message });
+    });
+}
+
+function updateSymbolCard(symbol, data) {
+  const priceElement = document.getElementById(`price-${symbol}`);
+  const foElement = document.getElementById(`fo-${symbol}`);
+  const timeElement = document.getElementById(`time-${symbol}`);
+  
+  if (data.error) {
+    priceElement.textContent = 'Error';
+    priceElement.className = 'fw-bold text-danger';
+    foElement.innerHTML = '<span class="badge bg-secondary">Error</span>';
+  } else {
+    // Update price
+    const currentPrice = parseFloat(priceElement.textContent.replace('₹', '')) || 0;
+    const newPrice = data.cmp || 0;
+    
+    priceElement.textContent = newPrice ? `₹${newPrice.toFixed(2)}` : 'N/A';
+    
+    // Price change indication
+    if (currentPrice > 0 && newPrice > 0) {
+      if (newPrice > currentPrice) {
+        priceElement.className = 'fw-bold text-success';
+        animateCard(symbol, 'success');
+      } else if (newPrice < currentPrice) {
+        priceElement.className = 'fw-bold text-danger';
+        animateCard(symbol, 'danger');
+      } else {
+        priceElement.className = 'fw-bold text-primary';
+      }
+    } else {
+      priceElement.className = 'fw-bold text-primary';
+    }
+    
+    // Update F&O status
+    foElement.innerHTML = data.fo_available 
+      ? '<span class="badge bg-success">Yes</span>' 
+      : '<span class="badge bg-secondary">No</span>';
+  }
+  
+  timeElement.textContent = new Date().toLocaleTimeString();
+}
+
+function animateCard(symbol, type) {
+  const card = document.getElementById(`card-${symbol}`);
+  card.classList.add(`border-${type}`);
+  setTimeout(() => {
+    card.classList.remove(`border-${type}`);
+  }, 2000);
+}
+
+function updateStatus() {
+  document.getElementById('symbolCount').textContent = symbols.length;
+}
+
+function hideEmptyState() {
+  document.getElementById('emptyState').style.display = 'none';
+}
+
+function showEmptyState() {
+  document.getElementById('emptyState').style.display = 'block';
+}
+
+function applySettings() {
+  const newRate = parseInt(document.getElementById('refreshInterval').value) * 1000;
+  
+  if (newRate !== refreshRate) {
+    refreshRate = newRate;
+    document.getElementById('refreshRate').textContent = (refreshRate / 1000) + 's';
+    
+    // Restart monitoring if active
+    if (isMonitoring) {
+      stopMonitoring();
+      setTimeout(startMonitoring, 500);
+    }
+  }
+}
+
+function renderContracts(dataBySymbol) {
+  const container = document.getElementById('contractsContainer');
+  container.innerHTML = '';
+  Object.keys(dataBySymbol).forEach(symbol => {
+    const rows = dataBySymbol[symbol] || [];
+    const table = document.createElement('div');
+    table.className = 'card mb-3';
+    table.innerHTML = `
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>${symbol}</strong>
+        <span class="badge bg-primary">${rows.length} contracts</span>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Scrip</th>
+                <th>Type</th>
+                <th>Strike</th>
+                <th>CMP</th>
+                <th>LTP</th>
+                <th>Bid</th>
+                <th>Ask</th>
+                <th>BidQty</th>
+                <th>AskQty</th>
+                <th>Last</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map(r => `
+                <tr>
+                  <td><small>${r.ScripName || ''}</small></td>
+                  <td>${r.OptionType || ''}</td>
+                  <td>${r.StrikePrice || ''}</td>
+                  <td>${fmtPrice(r.CMP)}</td>
+                  <td>${fmtPrice(r.LTP)}</td>
+                  <td>${fmtPrice(r.BidPrice)}</td>
+                  <td>${fmtPrice(r.AskPrice)}</td>
+                  <td>${r.BidQty || 0}</td>
+                  <td>${r.AskQty || 0}</td>
+                  <td><small>${r.LastUpdate || ''}</small></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+    container.appendChild(table);
+  });
+}
+
+function fmtPrice(v) {
+  const num = parseFloat(v || 0);
+  if (!isFinite(num)) return '0.00';
+  return '₹' + num.toFixed(2);
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+  showEmptyState();
+  
+  // Allow Enter key in symbol input
+  document.getElementById('symbolInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+      addSymbols();
+    }
+  });
+});
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', function() {
+  if (monitoringInterval) {
+    clearInterval(monitoringInterval);
+  }
+});
+
+// Add some CSS for animations
+const style = document.createElement('style');
+style.textContent = `
+  .symbol-card {
+    transition: all 0.3s ease;
+  }
+  .symbol-card.border-success {
+    border-color: #198754 !important;
+    border-width: 2px !important;
+  }
+  .symbol-card.border-danger {
+    border-color: #dc3545 !important;
+    border-width: 2px !important;
+  }
+`;
+document.head.appendChild(style);
+</script>
+
+{% endblock %}

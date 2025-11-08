@@ -1,0 +1,33 @@
+# Multi-User Application Requirements
+# Install with: pip install -r requirements_multiuser.txt
+
+# Core Flask
+Flask>=2.3.0
+
+# Authentication
+Flask-Login>=0.6.2
+
+# Encryption
+cryptography>=41.0.0
+
+# Sessions (optional - for Redis-backed sessions in production)
+flask-session>=0.5.0
+redis>=4.5.0
+
+# Task Queue (optional - for Celery background jobs)
+celery>=5.3.0
+
+# Production Server
+gunicorn>=21.2.0
+
+# Database
+# sqlite3 is built into Python
+
+# Existing dependencies (from your current project)
+pandas>=2.0.0
+numpy>=1.24.0
+requests>=2.31.0
+aiohttp>=3.8.0
+openpyxl>=3.1.0  # Can be removed if fully migrated to SQLite
+werkzeug>=2.3.0
+

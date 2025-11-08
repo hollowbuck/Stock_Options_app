@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">
+        <h4 class="mb-0">Authenticate Zerodha API</h4>
+        <small class="text-muted">Provide your access token to initialize the session</small>
+      </div>
+      <div class="card-body">
+        {% if status == 'error' and message %}
+          <div class="alert alert-danger" role="alert">
+            <i class="bi bi-exclamation-triangle"></i> {{ message }}
+          </div>
+        {% endif %}
+        <form method="post">
+          <div class="mb-3">
+            <label class="form-label">API Key</label>
+            <input type="text" class="form-control" value="{{ api_key }}" disabled>
+            <div class="form-text">Configured via ZERODHA_API_KEY environment variable</div>
+          </div>
+          <div class="mb-3">
+            <label for="access_token" class="form-label">Access Token</label>
+            <input type="text" class="form-control" id="access_token" name="access_token" 
+                   value="{{ access_token or '' }}" placeholder="Enter access token" required>
+            <div class="form-text">Refresh daily; paste the latest token here.</div>
+          </div>
+          <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+            <a href="{{ url_for('main.dashboard') }}" class="btn btn-secondary">
+              <i class="bi bi-arrow-left"></i> Back
+            </a>
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-check-circle"></i> Authenticate
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+

@@ -1,0 +1,244 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-12">
+    <div class="card">
+      <div class="card-header">
+        <h4 class="mb-0">Processing Results & Reports</h4>
+        <small class="text-muted">View processed options data and download Excel reports</small>
+      </div>
+      <div class="card-body">
+        
+        {% if results %}
+        <!-- Results Overview -->
+        <div class="row mb-4">
+          <div class="col-md-3">
+            <div class="card bg-success text-white text-center">
+              <div class="card-body">
+                <h5 class="card-title">{{ results|length }}</h5>
+                <p class="card-text">Successfully Processed</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card bg-danger text-white text-center">
+              <div class="card-body">
+                <h5 class="card-title">{{ failed_symbols|length }}</h5>
+                <p class="card-text">Failed Symbols</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card bg-info text-white text-center">
+              <div class="card-body">
+                <h5 class="card-title">
+                  {% set total_contracts = 0 %}
+                  {% for symbol, data in results.items() %}
+                    {% set total_contracts = total_contracts + data|length %}
+                  {% endfor %}
+                  {{ total_contracts }}
+                </h5>
+                <p class="card-text">Total Contracts</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card bg-warning text-dark text-center">
+              <div class="card-body">
+                <h5 class="card-title">Options_Data.xlsx</h5>
+                <p class="card-text">Excel Report Generated</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="d-flex justify-content-end mb-3">
+          <a href="{{ url_for('main.download_excel') }}" class="btn btn-primary">
+            <i class="bi bi-download"></i> Download Excel
+          </a>
+        </div>
+
+        <!-- Detailed Results -->
+        <div class="accordion" id="resultsAccordion">
+          {% for symbol, data in results.items() %}
+          <div class="accordion-item">
+            <h2 class="accordion-header">
+              <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                      data-bs-target="#collapse{{ loop.index }}">
+                <strong>{{ symbol }}</strong> 
+                <span class="badge bg-primary ms-2">{{ data|length }} contracts</span>
+              </button>
+            </h2>
+            <div id="collapse{{ loop.index }}" class="accordion-collapse collapse">
+              <div class="accordion-body p-0">
+                <div class="table-responsive">
+                  <table class="table table-sm mb-0">
+                    <thead class="table-light">
+                      <tr>
+                        <th>Scrip Name</th>
+                        <th>Type</th>
+                        <th>Strike</th>
+                        <th>CMP</th>
+                        <th>LTP</th>
+                        <th>Bid</th>
+                        <th>Ask</th>
+                        <th>Lot Size</th>
+                        <th>Margin (₹)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for contract in data %}
+                      <tr>
+                        <td><small>{{ contract.ScripName }}</small></td>
+                        <td>
+                          <span class="badge {% if contract.OptionType == 'CE' %}bg-success{% else %}bg-danger{% endif %}">
+                            {{ contract.OptionType }}
+                          </span>
+                        </td>
+                        <td>{{ contract.StrikePrice }}</td>
+                        <td>₹{{ "%.2f"|format(contract.CMP) }}</td>
+                        <td>₹{{ "%.2f"|format(contract.LTP or 0) }}</td>
+                        <td>₹{{ (contract.BidPrice or 0)|float }}</td>
+                        <td>₹{{ (contract.AskPrice or 0)|float }}</td>
+                        <td>{{ contract.Lot_Size }}</td>
+                        <td>₹{{ "{:,.0f}".format(contract.Margin_Required or 0) }}</td>
+                      </tr>
+                      {% endfor %}
+                      {% if data|length > 20 %}
+                      <tr>
+                        <td colspan="9" class="text-center text-muted">
+                          <em>... and {{ data|length - 20 }} more contracts (view in Excel)</em>
+                        </td>
+                      </tr>
+                      {% endif %}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+
+        {% else %}
+        <!-- No Results -->
+        <div class="text-center py-5">
+          <i class="bi bi-inbox display-1 text-muted"></i>
+          <h3 class="mt-3 text-muted">No Results Available</h3>
+          <p class="text-muted">Process some symbols first to view results here.</p>
+          <a href="{{ url_for('main.process_options') }}" class="btn btn-primary">
+            <i class="bi bi-play-fill"></i> Start Processing
+          </a>
+        </div>
+        {% endif %}
+
+        <!-- Failed Symbols Section -->
+        {% if failed_symbols %}
+        <div class="card mt-4">
+          <div class="card-header bg-danger text-white">
+            <h6 class="mb-0">
+              <i class="bi bi-exclamation-triangle"></i> Failed Symbols ({{ failed_symbols|length }})
+            </h6>
+          </div>
+          <div class="card-body">
+            <div class="row">
+              {% for symbol in failed_symbols %}
+              <div class="col-md-2 col-sm-4 col-6 mb-2">
+                <span class="badge bg-danger w-100">{{ symbol }}</span>
+              </div>
+              {% endfor %}
+            </div>
+            <div class="mt-3">
+              <small class="text-muted">
+                <strong>Common reasons for failure:</strong> Symbol not found, No F&O contracts available, 
+                API timeout, Market closed, or Symbol suspended.
+              </small>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- Action Buttons -->
+        <div class="d-flex justify-content-between mt-4">
+          <div>
+            <a href="{{ url_for('main.dashboard') }}" class="btn btn-secondary">
+              <i class="bi bi-house"></i> Dashboard
+            </a>
+            <a href="{{ url_for('main.processing_status_page') }}" class="btn btn-info">
+              <i class="bi bi-activity"></i> Processing Status
+            </a>
+          </div>
+          <div>
+            <a href="{{ url_for('main.process_options') }}" class="btn btn-success">
+              <i class="bi bi-plus"></i> Process More Symbols
+            </a>
+            {% if results %}
+            <button class="btn btn-primary" onclick="downloadResults()">
+              <i class="bi bi-download"></i> Download Data
+            </button>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Excel File Information -->
+        {% if results %}
+        <div class="alert alert-info mt-4" role="alert">
+          <h6><i class="bi bi-info-circle"></i> Excel File Information</h6>
+          <p class="mb-0">
+            <strong>File:</strong> Options_Data.xlsx<br>
+            <strong>Location:</strong> Application root directory<br>
+            <strong>Sheets:</strong> One sheet per symbol with all contract details<br>
+            <strong>Formula Preservation:</strong> Any existing formulas in the Excel file will be preserved<br>
+            <strong>Real-time Updates:</strong> Enable real-time updates to keep data current
+          </p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function downloadResults() {
+  // Create JSON download
+  const data = {{ results|tojson }};
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'options_results_' + new Date().toISOString().split('T')[0] + '.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  
+  // Show notification
+  const toast = document.createElement('div');
+  toast.className = 'toast position-fixed top-0 end-0 m-3';
+  toast.innerHTML = `
+    <div class="toast-body">
+      <i class="bi bi-check-circle text-success"></i>
+      Results downloaded as JSON. Excel file available in application directory.
+    </div>
+  `;
+  document.body.appendChild(toast);
+  const bsToast = new bootstrap.Toast(toast);
+  bsToast.show();
+  
+  setTimeout(() => {
+    document.body.removeChild(toast);
+  }, 3000);
+}
+
+// Auto-expand first accordion item if only one symbol
+document.addEventListener('DOMContentLoaded', function() {
+  const accordionButtons = document.querySelectorAll('#resultsAccordion .accordion-button');
+  if (accordionButtons.length === 1) {
+    accordionButtons[0].click();
+  }
+});
+</script>
+
+{% endblock %}

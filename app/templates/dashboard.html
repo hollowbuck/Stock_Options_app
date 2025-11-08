@@ -1,0 +1,260 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row">
+  <div class="col-12">
+    <div class="p-5 mb-4 bg-light rounded-3">
+      <div class="container-fluid py-5">
+        <h1 class="display-5 fw-bold">Stock Options Processing Dashboard</h1>
+        <p class="col-md-8 fs-5">
+          Stock Options data with real-time monitoring and symbol validation.
+        </p>
+        
+        {% if auth_status %}
+          <div class="alert alert-success" role="alert">
+            <i class="bi bi-check-circle-fill"></i> Authentication Status: Connected
+          </div>
+        {% else %}
+          <div class="alert alert-warning" role="alert">
+            <i class="bi bi-exclamation-triangle-fill"></i> Authentication required. 
+            <a href="{{ url_for('main.auth') }}" class="alert-link">Click here to authenticate</a>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <!-- Authentication Card -->
+  <div class="col-md-6 col-lg-4">
+    <div class="card h-100">
+      <div class="card-header bg-primary text-white">
+        <h5 class="card-title mb-0">
+          <i class="bi bi-key"></i> Authentication
+        </h5>
+      </div>
+      <div class="card-body">
+        <p class="card-text">Set up and manage API authentication credentials.</p>
+        <div class="d-grid">
+          <a class="btn btn-primary" href="{{ url_for('main.auth') }}" role="button">
+            Manage Auth
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Symbol Lookup Card -->
+  <div class="col-md-6 col-lg-4">
+    <div class="card h-100">
+      <div class="card-header bg-info text-white">
+        <h5 class="card-title mb-0">
+          <i class="bi bi-search"></i> Symbol Lookup
+        </h5>
+      </div>
+      <div class="card-body">
+        <p class="card-text">Validate symbols, check F&O availability, and get current market prices.</p>
+        <div class="d-grid">
+          <a class="btn btn-info" href="{{ url_for('main.symbol_lookup') }}" role="button">
+            Lookup Symbols
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Process Options Card -->
+  <div class="col-md-6 col-lg-4">
+    <div class="card h-100">
+      <div class="card-header bg-success text-white">
+        <h5 class="card-title mb-0">
+          <i class="bi bi-gear"></i> Process Options
+        </h5>
+      </div>
+      <div class="card-body">
+        <p class="card-text">Select expiry dates and process options data for multiple symbols.</p>
+        <div class="d-grid">
+          {% if auth_status %}
+            <a class="btn btn-success" href="{{ url_for('main.select_expiry') }}" role="button">
+              Start Processing
+            </a>
+          {% else %}
+            <button class="btn btn-success" disabled title="Authentication required">
+              Start Processing
+            </button>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Processing Status Card -->
+  <div class="col-md-6 col-lg-4">
+    <div class="card h-100">
+      <div class="card-header bg-warning text-dark">
+        <h5 class="card-title mb-0">
+          <i class="bi bi-activity"></i> Processing Status
+        </h5>
+      </div>
+      <div class="card-body">
+        <p class="card-text">Monitor current processing jobs and view progress in real-time.</p>
+        <div class="d-grid">
+          <a class="btn btn-warning" href="{{ url_for('main.processing_status_page') }}" role="button">
+            View Status
+          </a>
+        </div>
+        {% if processing_status.is_running %}
+          <div class="mt-2">
+            <small class="text-success">
+              <i class="bi bi-circle-fill"></i> Currently processing: {{ processing_status.current_symbol }}
+            </small>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Real-time Monitor Card -->
+  <div class="col-md-6 col-lg-4">
+    <div class="card h-100">
+      <div class="card-header bg-secondary text-white">
+        <h5 class="card-title mb-0">
+          <i class="bi bi-graph-up"></i> Real-time Monitor
+        </h5>
+      </div>
+      <div class="card-body">
+        <p class="card-text">Live monitoring dashboard for tracking symbol prices and market data.</p>
+        <div class="d-grid">
+          <a class="btn btn-secondary" href="{{ url_for('main.live_monitor') }}" role="button">
+            Open Monitor
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Enhanced Live Monitor Card -->
+  <div class="col-md-6 col-lg-4">
+    <div class="card h-100">
+      <div class="card-header bg-success text-white">
+        <h5 class="card-title mb-0">
+          <i class="bi bi-lightning"></i> Enhanced Live Monitor
+        </h5>
+      </div>
+      <div class="card-body">
+        <p class="card-text">Real-time Zerodha API data with calculated columns and distance chooser.</p>
+        <div class="d-grid">
+          <a class="btn btn-success" href="{{ url_for('main.live_monitor') }}" role="button">
+            Open Enhanced Monitor
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Results & Reports Card -->
+  <div class="col-md-6 col-lg-4">
+    <div class="card h-100">
+      <div class="card-header bg-dark text-white">
+        <h5 class="card-title mb-0">
+          <i class="bi bi-file-earmark-spreadsheet"></i> Results & Reports
+        </h5>
+      </div>
+      <div class="card-body">
+        <p class="card-text">View processed results and download Excel reports with preserved formulas.</p>
+        <div class="d-grid">
+          <a class="btn btn-dark" href="{{ url_for('main.view_results') }}" role="button">
+            View Results
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- System Status Section -->
+<div class="row mt-5">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0">System Status</h5>
+      </div>
+      <div class="card-body">
+        <div class="row text-center">
+          <div class="col-md-3">
+            <div class="border-end">
+              <h6 class="text-muted">Authentication</h6>
+              {% if auth_status %}
+                <span class="badge bg-success">Connected</span>
+              {% else %}
+                <span class="badge bg-danger">Not Connected</span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="border-end">
+              <h6 class="text-muted">Processing</h6>
+              {% if processing_status.is_running %}
+                <span class="badge bg-warning">Running</span>
+              {% else %}
+                <span class="badge bg-secondary">Idle</span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="border-end">
+              <h6 class="text-muted">Last Results</h6>
+              {% if processing_status.results %}
+                <span class="badge bg-info">{{ processing_status.results|length }} symbols</span>
+              {% else %}
+                <span class="badge bg-secondary">None</span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="col-md-3">
+            <h6 class="text-muted">Failed Symbols</h6>
+            {% if processing_status.failed_symbols %}
+              <span class="badge bg-danger">{{ processing_status.failed_symbols|length }}</span>
+            {% else %}
+              <span class="badge bg-success">0</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Recent Messages -->
+{% if processing_status.messages %}
+<div class="row mt-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">
+        <h6 class="mb-0">Recent Activity</h6>
+      </div>
+      <div class="card-body">
+        <div style="max-height: 200px; overflow-y: auto;">
+          {% for message in processing_status.messages[-10:] %}
+            <div class="small text-muted border-bottom py-1">
+              {{ message }}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<script>
+// Auto-refresh status every 30 seconds
+setInterval(function() {
+  if (window.location.pathname === '{{ url_for("main.dashboard") }}') {
+    location.reload();
+  }
+}, 30000);
+</script>
+
+{% endblock %}

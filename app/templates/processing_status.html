@@ -1,0 +1,313 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-10">
+    <div class="card">
+      <div class="card-header">
+        <h4 class="mb-0">Processing Status</h4>
+        <small class="text-muted">Real-time monitoring of options data processing</small>
+      </div>
+      <div class="card-body">
+        
+        <!-- Status Overview -->
+        <div class="row mb-4">
+          <div class="col-md-3">
+            <div class="text-center">
+              <h5 class="mb-1">Status</h5>
+              {% if status.is_running %}
+                <span class="badge bg-warning fs-6">
+                  <i class="bi bi-hourglass-split"></i> Running
+                </span>
+              {% else %}
+                <span class="badge bg-secondary fs-6">
+                  <i class="bi bi-stop-circle"></i> Stopped
+                </span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="text-center">
+              <h5 class="mb-1">Progress</h5>
+              <span class="fs-4" id="progressPercentage">{{ status.progress }}%</span>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="text-center">
+              <h5 class="mb-1">Symbols</h5>
+              <span class="fs-4" id="symbolsCount">{{ status.current_symbol or status.total_symbols or 0 }}</span>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="text-center">
+              <h5 class="mb-1">Current</h5>
+              <span class="badge bg-info" id="currentBadge">{{ status.current_symbol or 'None' }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Progress Bar -->
+        <div class="mb-4">
+          <div class="progress" style="height: 25px;">
+            <div class="progress-bar progress-bar-striped {% if status.is_running %}progress-bar-animated{% endif %}" 
+                 role="progressbar" 
+                 style="width: {{ status.progress }}%" 
+                 aria-valuenow="{{ status.progress }}" 
+                 aria-valuemin="0" 
+                 aria-valuemax="100">
+              {{ status.progress }}%
+            </div>
+          </div>
+        </div>
+
+        <!-- Processing Info -->
+        {% if status.start_time %}
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <div class="card bg-light">
+              <div class="card-body">
+                <h6 class="card-title">Processing Started</h6>
+                <p class="mb-0">{{ status.start_time.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="card bg-light">
+              <div class="card-body">
+                <h6 class="card-title">Results Summary</h6>
+                <p class="mb-0">
+                  Success: <span class="badge bg-success">{{ status.results|length }}</span>
+                  Failed: <span class="badge bg-danger">{{ status.failed_symbols|length }}</span>
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- Messages Log -->
+        {% if status.messages %}
+        <div class="card">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <h6 class="mb-0">Processing Log</h6>
+            <button class="btn btn-sm btn-outline-secondary" onclick="toggleAutoScroll()">
+              <i class="bi bi-arrow-down"></i> Auto-scroll
+            </button>
+          </div>
+          <div class="card-body p-0">
+            <div id="messagesLog" style="height: 300px; overflow-y: auto; padding: 15px; background-color: #f8f9fa; font-family: monospace; font-size: 0.9em;">
+              {% for message in status.messages %}
+                <div class="border-bottom py-1">
+                  {{ message }}
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- Action Buttons -->
+        <div class="d-flex justify-content-between mt-4">
+          <div>
+            <a href="{{ url_for('main.dashboard') }}" class="btn btn-secondary">
+              <i class="bi bi-house"></i> Back to Dashboard
+            </a>
+            <a href="{{ url_for('main.process_options') }}" class="btn btn-primary">
+              <i class="bi bi-plus"></i> Start New Processing
+            </a>
+          </div>
+          <div>
+            {% if status.results %}
+              <a href="{{ url_for('main.view_results') }}" class="btn btn-success">
+                <i class="bi bi-eye"></i> View Results
+              </a>
+            {% endif %}
+            <button class="btn btn-info" onclick="refreshStatus()">
+              <i class="bi bi-arrow-clockwise"></i> Refresh
+            </button>
+          </div>
+        </div>
+
+        <!-- Auto-refresh notification -->
+        {% if status.is_running %}
+        <div class="alert alert-info mt-3" role="alert">
+          <i class="bi bi-info-circle"></i> 
+          This page will automatically refresh every 5 seconds while processing is active.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let autoScrollEnabled = true;
+let refreshInterval;
+let isInitialLoad = true;
+
+function scrollToBottom() {
+  if (autoScrollEnabled) {
+    const log = document.getElementById('messagesLog');
+    if (log) {
+      log.scrollTop = log.scrollHeight;
+    }
+  }
+}
+
+function toggleAutoScroll() {
+  autoScrollEnabled = !autoScrollEnabled;
+  const button = event.target.closest('button');
+  if (autoScrollEnabled) {
+    button.innerHTML = '<i class="bi bi-arrow-down"></i> Auto-scroll';
+    button.classList.remove('btn-outline-secondary');
+    button.classList.add('btn-outline-success');
+    scrollToBottom();
+  } else {
+    button.innerHTML = '<i class="bi bi-pause"></i> Manual scroll';
+    button.classList.remove('btn-outline-success');
+    button.classList.add('btn-outline-secondary');
+  }
+}
+
+function refreshStatus() {
+  fetch('{{ url_for("main.api_processing_status") }}')
+    .then(response => response.json())
+    .then(data => {
+      // Update progress percentage (specific ID)
+      const progressPercentage = document.getElementById('progressPercentage');
+      if (progressPercentage) {
+        progressPercentage.textContent = data.progress + '%';
+      }
+      
+      // Update progress bar
+      const progressBar = document.querySelector('.progress-bar');
+      if (progressBar) {
+        progressBar.style.width = data.progress + '%';
+        progressBar.setAttribute('aria-valuenow', data.progress);
+        progressBar.textContent = data.progress + '%';
+        
+        // Update animation state
+        if (data.is_running && !progressBar.classList.contains('progress-bar-animated')) {
+          progressBar.classList.add('progress-bar-animated');
+        } else if (!data.is_running && progressBar.classList.contains('progress-bar-animated')) {
+          progressBar.classList.remove('progress-bar-animated');
+        }
+      }
+      
+      // Update symbols count (shows X/Y or total)
+      const symbolsCount = document.getElementById('symbolsCount');
+      if (symbolsCount) {
+        if (data.current_symbol && data.current_symbol.includes('/')) {
+          symbolsCount.textContent = data.current_symbol;
+        } else if (data.current_symbol && !data.current_symbol.includes('Batch')) {
+          symbolsCount.textContent = data.current_symbol;
+        } else if (data.total_symbols) {
+          symbolsCount.textContent = `0/${data.total_symbols}`;
+        } else {
+          symbolsCount.textContent = data.total_symbols || 0;
+        }
+      }
+      
+      // Update current symbol badge
+      const currentBadge = document.getElementById('currentBadge');
+      if (currentBadge) {
+        if (data.current_symbol) {
+          currentBadge.textContent = data.current_symbol;
+        } else {
+          currentBadge.textContent = 'None';
+        }
+      }
+      
+      // Update status badge
+      const statusBadge = document.querySelector('span.badge.fs-6');
+      if (statusBadge) {
+        if (data.is_running) {
+          statusBadge.className = 'badge bg-warning fs-6';
+          statusBadge.innerHTML = '<i class="bi bi-hourglass-split"></i> Running';
+        } else {
+          statusBadge.className = 'badge bg-secondary fs-6';
+          statusBadge.innerHTML = '<i class="bi bi-stop-circle"></i> Stopped';
+        }
+      }
+      
+      // Update messages log
+      const messagesLog = document.getElementById('messagesLog');
+      if (messagesLog && data.messages) {
+        let html = '';
+        data.messages.forEach(message => {
+          html += '<div class="border-bottom py-1">' + message + '</div>';
+        });
+        messagesLog.innerHTML = html;
+        if (isInitialLoad || autoScrollEnabled) {
+          scrollToBottom();
+        }
+        isInitialLoad = false;
+      }
+      
+      // If processing is complete, show completion message and disable auto-refresh
+      if (!data.is_running && data.progress === 100) {
+        clearInterval(refreshInterval);
+        refreshInterval = null;
+        
+        // Show completion notification
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'alert alert-success mt-3';
+        alertDiv.innerHTML = '<i class="bi bi-check-circle-fill"></i> <strong>Processing Complete!</strong> ' + 
+                             `Success: ${data.results ? Object.keys(data.results).length : 0} symbols, ` +
+                             `Failed: ${data.failed_symbols ? data.failed_symbols.length : 0} symbols`;
+        document.querySelector('.card-body').appendChild(alertDiv);
+      }
+    })
+    .catch(error => {
+      console.error('Error refreshing status:', error);
+    });
+}
+
+// Start auto-refresh if processing is active
+{% if status.is_running %}
+// Start immediately
+isInitialLoad = true;
+// Start first refresh immediately
+refreshStatus();
+// Then continue with interval
+refreshInterval = setInterval(refreshStatus, 2000); // Refresh every 2 seconds
+
+// Display auto-refresh indicator
+const autoRefreshIndicator = document.createElement('div');
+autoRefreshIndicator.className = 'alert alert-info mt-2';
+autoRefreshIndicator.id = 'autoRefreshIndicator';
+autoRefreshIndicator.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Auto-refreshing every 2 seconds...';
+const alertInfo = document.querySelector('.alert-info.mt-3');
+if (alertInfo) {
+  alertInfo.replaceWith(autoRefreshIndicator);
+}
+{% endif %}
+
+// Initial load and scroll
+document.addEventListener('DOMContentLoaded', function() {
+  scrollToBottom();
+  isInitialLoad = false;
+  
+  // If processing is running, start auto-refresh immediately
+  if ({{ 'true' if status.is_running else 'false' }}) {
+    refreshStatus();
+  }
+});
+
+// Clean up interval when page is hidden/closed
+document.addEventListener('visibilitychange', function() {
+  if (document.hidden && refreshInterval) {
+    clearInterval(refreshInterval);
+    refreshInterval = null;
+  } else if (!document.hidden && !refreshInterval && {{ 'true' if status.is_running else 'false' }}) {
+    refreshInterval = setInterval(refreshStatus, 2000);
+  }
+});
+
+// Initial scroll to bottom on page load
+window.addEventListener('load', function() {
+  setTimeout(scrollToBottom, 100);
+});
+</script>
+
+{% endblock %}
