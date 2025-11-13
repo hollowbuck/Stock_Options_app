@@ -3,10 +3,9 @@
 {% block content %}
 <div class="p-5 mb-4 bg-light rounded-3">
   <div class="container py-5">
-    <h1 class="display-5 fw-bold">Welcome to Stock Options Pro</h1>
+    <h1 class="display-5 fw-bold">Welcome to Stock Options</h1>
     <p class="col-md-8 fs-5">
-      Comprehensive Zerodha API integration for options chain analysis, real-time monitoring, 
-      and automated Excel reporting with formula preservation.
+      Options chain analysis and real-time monitoring.
     </p>
     <a class="btn btn-primary btn-lg" href="{{ url_for('main.dashboard') }}" role="button">
       <i class="bi bi-speedometer2"></i> Go to Dashboard
@@ -22,8 +21,7 @@
         <i class="bi bi-shield-check display-1 text-primary mb-3"></i>
         <h5 class="card-title">Secure API Integration</h5>
         <p class="card-text">
-          Direct integration with Zerodha Kite API for real-time market data 
-          with secure authentication and token management.
+          Direct integration for real-time market data.
         </p>
       </div>
     </div>
@@ -35,8 +33,7 @@
         <i class="bi bi-lightning-charge display-1 text-success mb-3"></i>
         <h5 class="card-title">Real-time Processing</h5>
         <p class="card-text">
-          High-performance multi-threaded processing with intelligent caching, 
-          rate limiting, and circuit breaker patterns for reliability.
+          High-performance multi-threaded processing with intelligent caching.
         </p>
       </div>
     </div>
@@ -48,8 +45,7 @@
         <i class="bi bi-file-earmark-excel display-1 text-warning mb-3"></i>
         <h5 class="card-title">Smart Excel Export</h5>
         <p class="card-text">
-          Advanced Excel integration with formula preservation, automated 
-          reporting, and real-time updates without breaking your custom formulas.
+          Advanced Excel integration with formula preservation.
         </p>
       </div>
     </div>
@@ -70,7 +66,7 @@
           <div class="col-md-6">
             <h6>Getting Started:</h6>
             <ol>
-              <li><strong>Authenticate:</strong> Set up your Zerodha API credentials</li>
+              <li><strong>Authenticate:</strong> Set up your credentials</li>
               <li><strong>Validate Symbols:</strong> Check which stocks have F&O contracts</li>
               <li><strong>Select Expiry:</strong> Choose the expiry date for options processing</li>
               <li><strong>Process Data:</strong> Run the options chain analysis</li>

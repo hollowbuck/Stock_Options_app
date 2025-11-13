@@ -731,9 +731,10 @@ def close_all_connections():
     global _POOL
     lock = _get_lock()
     with lock:
-        for conn in _POOL:
-            try:
-                conn.close()
-            except:
-                pass
+        for db_path, conns in _POOL.items():
+            for conn in conns:
+                try:
+                    conn.close()
+                except:
+                    pass
         _POOL.clear()

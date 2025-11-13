@@ -216,7 +216,7 @@ function startMonitoring() {
   document.getElementById('monitorStatus').className = 'text-success';
 
   // Tell backend to start monitoring these symbols (from last processed contracts)
-  fetch('{{ url_for('main.api_monitor_start') }}', {
+  fetch("{{ url_for('main.api_monitor_start') }}", {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ symbols })
@@ -237,7 +237,7 @@ function startFilteredMonitoring() {
   document.getElementById('monitorStatus').className = 'text-warning';
 
   // Tell backend to start monitoring symbols from filter results
-  fetch('{{ url_for('main.api_monitor_start_filtered') }}', {
+  fetch("{{ url_for('main.api_monitor_start_filtered') }}", {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' }
   }).then(r => r.json()).then(data => {
@@ -387,7 +387,7 @@ function clearAll() {
 
 function fetchAllSymbolData() {
   // Fetch latest contract data for monitored symbols
-  fetch('{{ url_for('main.api_monitor_data') }}')
+  fetch("{{ url_for('main.api_monitor_data') }}")
     .then(r => r.json())
     .then(payload => {
       const data = payload.data || {};
