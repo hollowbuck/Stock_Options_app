@@ -8,8 +8,8 @@
         <div class="card-header bg-primary text-white">
           <div class="row align-items-center">
             <div class="col-md-6">
-              <h4 class="mb-0"><i class="bi bi-broadcast"></i> Real-Time Options Monitor</h4>
-              <small>Per-user isolated monitoring with live updates</small>
+              <h4 class="mb-0"><i class="bi bi-broadcast"></i> Real-Time Options Monitor (SIMPLIFIED)</h4>
+              <small>Per-user isolated monitoring with reliable updates - Simplified version</small>
             </div>
             <div class="col-md-6 text-end">
               <div class="btn-group" role="group">
@@ -21,6 +21,9 @@
                 </button>
                 <button class="btn btn-info" onclick="showSettings()">
                   <i class="bi bi-gear"></i> Settings
+                </button>
+                <button class="btn btn-warning btn-sm" onclick="refreshData()">
+                  <i class="bi bi-arrow-clockwise"></i> Refresh
                 </button>
               </div>
             </div>
@@ -45,9 +48,9 @@
               <label class="form-label">Distance %</label>
               <select class="form-select" id="distancePercentage">
                 <option value="5">5%</option>
-                <option value="10" selected>10%</option>
+                <option value="10">10%</option>
                 <option value="15">15%</option>
-                <option value="20">20%</option>
+                <option value="20" selected>20%</option>
                 <option value="25">25%</option>
               </select>
             </div>
@@ -60,20 +63,21 @@
             <div class="col-md-2">
               <label class="form-label">Refresh (seconds)</label>
               <select class="form-select" id="refreshInterval">
-                <option value="5">5 sec</option>
-                <option value="10" selected>10 sec</option>
+                <option value="15">15 sec</option>
                 <option value="30">30 sec</option>
-                <option value="60">60 sec</option>
+                <option value="60" selected>60 sec</option>
+                <option value="120">120 sec</option>
               </select>
             </div>
             <div class="col-md-2">
               <label class="form-label">Update Mode</label>
               <div class="form-check form-switch mt-2">
-                <input class="form-check-input" type="checkbox" id="diffMode" checked>
+                <input class="form-check-input" type="checkbox" id="diffMode">
                 <label class="form-check-label" for="diffMode">
-                  Diff Updates
+                  Full Refresh Only
                 </label>
               </div>
+              <small class="text-muted">Simplified mode</small>
             </div>
           </div>
 
@@ -105,7 +109,7 @@
           <div id="liveDataContainer">
             <div class="text-center py-5" id="emptyState">
               <i class="bi bi-broadcast display-1 text-muted"></i>
-              <h3 class="mt-3 text-muted">Real-Time Monitor</h3>
+              <h3 class="mt-3 text-muted">Real-Time Monitor (SIMPLIFIED)</h3>
               <p class="text-muted">Configure settings above and click "Start" to begin live monitoring</p>
             </div>
           </div>
@@ -138,19 +142,22 @@
               Show High Yield Table (Yield > 80k)
             </label>
           </div>
-        </div>
-        <div class="mb-3">
-          <label class="form-label">Notification Options</label>
-          <div class="form-check">
-            <input class="form-check-input" type="checkbox" id="soundNotifications">
-            <label class="form-check-label" for="soundNotifications">
-              Sound alerts for new contracts
-            </label>
-          </div>
           <div class="form-check">
             <input class="form-check-input" type="checkbox" id="highlightChanges" checked>
             <label class="form-check-label" for="highlightChanges">
-              Highlight updated rows
+              Highlight Row Changes
+            </label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="soundNotifications" checked>
+            <label class="form-check-label" for="soundNotifications">
+              Sound Notifications
+            </label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="autoRefresh" checked>
+            <label class="form-check-label" for="autoRefresh">
+              Auto-refresh when data available
             </label>
           </div>
         </div>
@@ -164,7 +171,6 @@
 </div>
 
 <script>
-// Predefined symbols list (200+ liquid F&O stocks)
 const PREDEFINED_SYMBOLS = [
   "ADANIENSOL", "ADANIENT", "ADANIGREEN", "ADANIPORTS", "AMBUJACEM", "ASHOKLEY",
   "ASIANPAINT", "ASTRAL", "AXISBANK", "BAJAJ-AUTO", "BAJAJFINSV", "BAJFINANCE",
@@ -189,50 +195,49 @@ const PREDEFINED_SYMBOLS = [
   "YESBANK", "ZYDUSLIFE"
 ];
 
+// SIMPLIFIED: Clean state management
 let isMonitoring = false;
 let updateInterval = null;
-let useDiffMode = true;
-
-// Settings
+let initialLoadInterval = null;
 let showFiltered = true;
 let showHighYield = true;
 let highlightChanges = true;
-let soundNotifications = false;
+let soundNotifications = true;
+let autoRefresh = true;
+let lastDisplayedData = null;
+let dataAvailable = false;
+let fetchCount = 0;
 
-// Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
   loadExpiryDates();
+  // Disable diff mode by default - use full refresh only
+  document.getElementById('diffMode').checked = false;
 });
 
 function loadExpiryDates() {
-  fetch("{{ url_for('main.api_live_monitor_expiry_dates') }}")
+  fetch('{{ url_for("main.api_live_monitor_expiry_dates") }}')
     .then(response => response.json())
     .then(data => {
       if (data.status === 'success') {
         const expirySelect = document.getElementById('expirySelect');
         expirySelect.innerHTML = '<option value="">Select Expiry</option>';
-        
         data.expiry_dates.forEach(date => {
           const option = document.createElement('option');
           option.value = date;
           option.textContent = date;
           expirySelect.appendChild(option);
         });
-        
-        // Set default to first date
         if (data.expiry_dates.length > 0) {
           expirySelect.value = data.expiry_dates[0];
         }
       }
     })
-    .catch(error => {
-      console.error('Error loading expiry dates:', error);
-    });
+    .catch(error => console.error('Error loading expiry dates:', error));
 }
 
 function loadPredefinedSymbols() {
   document.getElementById('symbolsInput').value = PREDEFINED_SYMBOLS.join(', ');
-  alert(`Loaded ${PREDEFINED_SYMBOLS.length} predefined symbols`);
+  console.log(`Loaded ${PREDEFINED_SYMBOLS.length} predefined symbols`);
 }
 
 function startMonitoring() {
@@ -242,7 +247,6 @@ function startMonitoring() {
   const distance = parseInt(document.getElementById('distancePercentage').value);
   const refresh = parseInt(document.getElementById('refreshInterval').value);
   
-  // Validation
   if (symbols.length === 0) {
     alert('Please enter symbols');
     return;
@@ -253,11 +257,13 @@ function startMonitoring() {
     return;
   }
   
-  // Update settings
-  useDiffMode = document.getElementById('diffMode').checked;
+  // SIMPLIFIED: Reset state
+  isMonitoring = false; // Will be set to true after successful start
+  dataAvailable = false;
+  lastDisplayedData = null;
+  fetchCount = 0;
   
-  // Start monitoring session on server
-  fetch("{{ url_for('main.api_live_monitor_start') }}", {
+  fetch('{{ url_for("main.api_live_monitor_start") }}', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -272,18 +278,16 @@ function startMonitoring() {
     if (data.status === 'started') {
       isMonitoring = true;
       
-      // Update UI
       document.getElementById('startBtn').disabled = true;
       document.getElementById('stopBtn').disabled = false;
       document.getElementById('monitorStatus').textContent = 'Running';
       document.getElementById('monitorStatus').className = 'text-success';
       document.getElementById('symbolCount').textContent = symbols.length;
-      document.getElementById('emptyState').style.display = 'none';
       
-      // Start update loop
-      startUpdateLoop();
+      showLoadingMessage(symbols.length);
+      startInitialDataLoad();
       
-      console.log('Monitoring started:', data);
+      console.log('SIMPLIFIED: Monitoring started successfully');
     } else {
       alert('Failed to start monitoring: ' + (data.error || 'Unknown error'));
     }
@@ -294,163 +298,293 @@ function startMonitoring() {
   });
 }
 
+function showLoadingMessage(symbolCount) {
+  const container = document.getElementById('liveDataContainer');
+  container.innerHTML = `
+    <div class="text-center py-5" id="loadingState">
+      <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+      <h4 class="mt-3">Processing ${symbolCount} symbols...</h4>
+      <p class="text-muted">Initial data fetch may take 60-90 seconds. Please wait...</p>
+      <div class="progress mt-3" style="height: 25px; max-width: 500px; margin: 0 auto;">
+        <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" 
+             style="width: 0%" id="loadingProgress">0%</div>
+      </div>
+      <div class="mt-2">
+        <small class="text-muted" id="loadingStatus">Checking for data...</small>
+      </div>
+    </div>
+  `;
+}
+
 function stopMonitoring() {
-  fetch("{{ url_for('main.api_live_monitor_stop') }}", {
+  fetch('{{ url_for("main.api_live_monitor_stop") }}', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' }
   })
   .then(response => response.json())
   .then(data => {
     isMonitoring = false;
+    dataAvailable = false;
     
-    // Stop update loop
+    // Clear intervals
     if (updateInterval) {
       clearInterval(updateInterval);
       updateInterval = null;
     }
+    if (initialLoadInterval) {
+      clearInterval(initialLoadInterval);
+      initialLoadInterval = null;
+    }
     
-    // Update UI
     document.getElementById('startBtn').disabled = false;
     document.getElementById('stopBtn').disabled = true;
     document.getElementById('monitorStatus').textContent = 'Stopped';
     document.getElementById('monitorStatus').className = 'text-danger';
     
-    console.log('Monitoring stopped');
+    console.log('SIMPLIFIED: Monitoring stopped');
   })
-  .catch(error => {
-    console.error('Error stopping monitoring:', error);
-  });
+  .catch(error => console.error('Error stopping monitoring:', error));
 }
 
-function startUpdateLoop() {
-  // Initial fetch
-  fetchData();
+function startInitialDataLoad() {
+  let attempts = 0;
+  const maxAttempts = 30;
   
-  // Set up periodic updates
-  const refreshRate = parseInt(document.getElementById('refreshInterval').value) * 1000;
-  updateInterval = setInterval(fetchData, refreshRate);
+  initialLoadInterval = setInterval(() => {
+    if (!isMonitoring) {
+      clearInterval(initialLoadInterval);
+      return;
+    }
+    
+    attempts++;
+    
+    // Update UI
+    const progress = Math.min((attempts / maxAttempts) * 100, 95);
+    const progressBar = document.getElementById('loadingProgress');
+    const statusDiv = document.getElementById('loadingStatus');
+    
+    if (progressBar) {
+      progressBar.style.width = progress + '%';
+      progressBar.textContent = Math.round(progress) + '%';
+    }
+    if (statusDiv) {
+      statusDiv.textContent = `Attempt ${attempts}/${maxAttempts} - Checking for data...`;
+    }
+    
+    console.log(`SIMPLIFIED: Checking for data - attempt ${attempts}/${maxAttempts}`);
+    
+    checkForData()
+      .then(hasData => {
+        if (hasData) {
+          console.log('SIMPLIFIED: Data found! Setting up regular updates');
+          
+          // Stop initial loading
+          if (initialLoadInterval) {
+            clearInterval(initialLoadInterval);
+            initialLoadInterval = null;
+          }
+          
+          // Load and display data
+          refreshData();
+          
+          // Start regular update cycle
+          startRegularUpdates();
+        } else if (attempts >= maxAttempts) {
+          // Max attempts reached
+          if (initialLoadInterval) {
+            clearInterval(initialLoadInterval);
+            initialLoadInterval = null;
+          }
+          
+          showWaitingMessage();
+          startRegularUpdates(); // Still start updates for future data
+        }
+      })
+      .catch(error => {
+        console.error('Error checking for data:', error);
+        if (attempts >= maxAttempts) {
+          if (initialLoadInterval) {
+            clearInterval(initialLoadInterval);
+            initialLoadInterval = null;
+          }
+          startRegularUpdates();
+        }
+      });
+  }, 4000);
 }
 
-function fetchData() {
-  if (!isMonitoring) {
-    return;
-  }
-  
-  const endpoint = useDiffMode ? 
-    "{{ url_for('main.api_live_monitor_changes') }}" : 
-    "{{ url_for('main.api_live_monitor_data') }}";
-  
-  fetch(endpoint)
+function checkForData() {
+  return fetch('{{ url_for("main.api_live_monitor_data") }}')
     .then(response => response.json())
     .then(data => {
-      if (data.status === 'success') {
-        if (useDiffMode && data.has_changes) {
-          applyDiffs(data.changes);
-        } else if (!useDiffMode) {
-          displayFullData(data.data);
-        }
+      if (data.status === 'success' && data.data && data.data.filtered_data) {
+        const filteredData = data.data.filtered_data;
         
-        // Update status bar
-        updateStatusBar(data);
+        const hasFiltered = filteredData.filtered && Array.isArray(filteredData.filtered) && filteredData.filtered.length > 0;
+        const hasHighYield = filteredData.high_yield && Array.isArray(filteredData.high_yield) && filteredData.high_yield.length > 0;
+        
+        if (hasFiltered || hasHighYield) {
+          dataAvailable = true;
+          return true;
+        }
       }
-    })
-    .catch(error => {
-      console.error('Error fetching data:', error);
+      return false;
     });
 }
 
-function displayFullData(data) {
+function showWaitingMessage() {
   const container = document.getElementById('liveDataContainer');
+  container.innerHTML = `
+    <div class="alert alert-warning">
+      <h5><i class="bi bi-clock"></i> Waiting for data...</h5>
+      <p>The monitoring system is running but no contracts match the filter criteria yet:</p>
+      <ul>
+        <li><strong>Filtered:</strong> Yield > 50,000 AND Distance% > 15%</li>
+        <li><strong>High Yield:</strong> Yield > 80,000</li>
+      </ul>
+      <p>The system will automatically refresh when data becomes available.</p>
+      <p><small class="text-muted">You can also manually refresh or adjust your filter criteria.</small></p>
+      <button class="btn btn-primary" onclick="refreshData()">
+        <i class="bi bi-arrow-clockwise"></i> Check Now
+      </button>
+    </div>
+  `;
+}
+
+function startRegularUpdates() {
+  const refreshRate = parseInt(document.getElementById('refreshInterval').value) * 1000;
+  
+  updateInterval = setInterval(() => {
+    if (isMonitoring) {
+      fetchCount++;
+      console.log(`SIMPLIFIED: Regular update cycle ${fetchCount}`);
+      
+      if (dataAvailable || autoRefresh) {
+        refreshData();
+      } else {
+        checkForData().then(hasData => {
+          if (hasData && autoRefresh) {
+            console.log('SIMPLIFIED: New data available, auto-refreshing');
+            refreshData();
+          }
+        });
+      }
+    }
+  }, refreshRate);
+}
+
+function refreshData() {
+  console.log('SIMPLIFIED: Refreshing data...');
+  
+  fetch('{{ url_for("main.api_live_monitor_data") }}')
+    .then(response => response.json())
+    .then(data => {
+      if (data.status === 'success' && data.data) {
+        console.log('SIMPLIFIED: Data refresh successful');
+        
+        // Always display the latest data
+        displayData(data.data);
+        updateStatusBar(data);
+        dataAvailable = true;
+        lastDisplayedData = data.data;
+        
+        // Play notification sound for new data
+        if (soundNotifications && fetchCount > 1) {
+          playNotificationSound();
+        }
+      } else {
+        console.log('SIMPLIFIED: No valid data received');
+        if (!dataAvailable) {
+          showWaitingMessage();
+        }
+      }
+    })
+    .catch(error => {
+      console.error('SIMPLIFIED: Error refreshing data:', error);
+    });
+}
+
+function displayData(data) {
+  console.log('SIMPLIFIED: Displaying data');
+  const container = document.getElementById('liveDataContainer');
+  
+  // SIMPLIFIED: Always rebuild the entire display
   container.innerHTML = '';
   
   const filteredData = data.filtered_data;
   
-  if (!filteredData || (!filteredData.filtered && !filteredData.high_yield)) {
-    container.innerHTML = '<div class="alert alert-warning">No filtered data available yet</div>';
+  if (!filteredData) {
+    container.innerHTML = '<div class="alert alert-warning">No filtered data available</div>';
     return;
   }
   
+  let hasData = false;
+  
   // Display Filtered Table
-  if (showFiltered && filteredData.filtered && filteredData.filtered.length > 0) {
-    container.appendChild(createTable('Filtered Contracts', filteredData.filtered, 'filtered'));
+  if (showFiltered && filteredData.filtered && Array.isArray(filteredData.filtered) && filteredData.filtered.length > 0) {
+    console.log(`SIMPLIFIED: Creating filtered table with ${filteredData.filtered.length} rows`);
+    
+    const sortedFiltered = [...filteredData.filtered].sort((a, b) => {
+      return parseFloat(b['Dist %']) - parseFloat(a['Dist %']);
+    });
+    
+    const filteredTable = createTable('Filtered Contracts', sortedFiltered, 'filtered', 'bg-warning');
+    container.appendChild(filteredTable);
+    hasData = true;
   }
   
   // Display High Yield Table
-  if (showHighYield && filteredData.high_yield && filteredData.high_yield.length > 0) {
-    container.appendChild(createTable('High Yield Contracts', filteredData.high_yield, 'high_yield'));
+  if (showHighYield && filteredData.high_yield && Array.isArray(filteredData.high_yield) && filteredData.high_yield.length > 0) {
+    console.log(`SIMPLIFIED: Creating high yield table with ${filteredData.high_yield.length} rows`);
+    
+    const sortedHighYield = [...filteredData.high_yield].sort((a, b) => {
+      return parseFloat(b.Yield) - parseFloat(a.Yield);
+    });
+    
+    const highYieldTable = createTable('High Yield Contracts', sortedHighYield, 'high_yield', 'bg-success');
+    container.appendChild(highYieldTable);
+    hasData = true;
   }
   
-  // Update counts
-  document.getElementById('filteredCount').textContent = filteredData.filtered ? filteredData.filtered.length : 0;
-  document.getElementById('highYieldCount').textContent = filteredData.high_yield ? filteredData.high_yield.length : 0;
+  if (!hasData) {
+    showWaitingMessage();
+  } else {
+    updateCounts(filteredData);
+  }
+  
+  console.log('SIMPLIFIED: Data display completed');
 }
 
-// Add this function
-function showDebugInfo() {
-  fetch("{{ url_for('main.api_live_monitor_debug') }}")
-    .then(response => response.json())
-    .then(data => {
-      console.log('=== LIVE MONITOR DEBUG INFO ===');
-      console.log(data);
-      
-      if (data.status === 'success') {
-        const debug = data.debug;
-        alert(`Debug Info:
-Is Running: ${debug.is_running}
-Worker Thread Alive: ${debug.worker_thread_alive}
-Symbols: ${debug.symbols.join(', ')}
-Last Update: ${debug.last_update || 'Never'}
-Fetch Count: ${debug.stats.fetch_count}
-Error Count: ${debug.stats.error_count}
-Last Error: ${debug.stats.last_error || 'None'}
-Filtered Count: ${debug.filtered_data.filtered_count}
-High Yield Count: ${debug.filtered_data.high_yield_count}
-Queue Size: ${debug.changes_queue_size}
-
-Check browser console for full details.`);
-      } else {
-        alert('Debug Error: ' + data.error);
-        console.error(data);
-      }
-    })
-    .catch(error => {
-      console.error('Debug fetch error:', error);
-      alert('Failed to fetch debug info: ' + error.message);
-    });
-}
-
-// Add debug button to the UI (add this to your HTML)
-// Or just call showDebugInfo() from browser console
-
-function createTable(title, rows, type) {
+function createTable(title, rows, type, bgClass) {
   const card = document.createElement('div');
   card.className = 'card mb-3';
   card.id = `table-${type}`;
   
-  const bgClass = type === 'filtered' ? 'bg-warning' : 'bg-success';
-  
   card.innerHTML = `
     <div class="card-header ${bgClass} text-white">
       <h5 class="mb-0"><i class="bi bi-table"></i> ${title} <span class="badge bg-light text-dark">${rows.length}</span></h5>
+      <small>Last updated: ${new Date().toLocaleTimeString()}</small>
     </div>
     <div class="card-body p-0">
-      <div class="table-responsive">
+      <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
         <table class="table table-striped table-hover mb-0">
-          <thead class="table-dark">
+          <thead class="table-dark sticky-top">
             <tr>
               <th>Symbol</th>
               <th>CMP</th>
               <th>Type</th>
               <th>Strike</th>
               <th>Bid</th>
-              <th>Days Left</th>
+              <th>Days</th>
               <th>Prem/Day</th>
-              <th>Prem Until Expiry</th>
+              <th>Prem Total</th>
               <th>Yield</th>
               <th>Dist %</th>
             </tr>
           </thead>
-          <tbody id="tbody-${type}">
+          <tbody>
             ${rows.map(row => createTableRow(row, type)).join('')}
           </tbody>
         </table>
@@ -462,167 +596,96 @@ function createTable(title, rows, type) {
 }
 
 function createTableRow(row, type) {
-  const optionTypeClass = row.OptionType === 'CE' ? 'success' : 'danger';
+  if (!row || typeof row !== 'object') {
+    return '';
+  }
   
-  // Conditional coloring based on type
+  // Safe value extraction
+  const symbol = String(row.Symbol || '');
+  const cmp = parseFloat(row.CMP) || 0;
+  const optionType = String(row.OptionType || '');
+  const strikePrice = parseFloat(row.StrikePrice) || 0;
+  const bidPrice = parseFloat(row.BidPrice) || 0;
+  const daysLeft = parseInt(row['Days Left']) || 0;
+  const premDay = parseFloat(row['Prem/Day']) || 0;
+  const premTotal = parseFloat(row['Prem Until Expiry']) || 0;
+  const yield_val = parseFloat(row.Yield) || 0;
+  const distPct = parseFloat(row['Dist %']) || 0;
+  
+  // Highlighting
   let rowClass = '';
   if (highlightChanges) {
     if (type === 'filtered') {
-      const dist = parseFloat(row['Dist %']) || 0;
-      if (dist >= 15 && dist < 18) rowClass = 'table-warning';
-      else if (dist >= 18 && dist < 20) rowClass = 'table-success';
-      else if (dist >= 20) rowClass = 'table-info';
+      if (distPct >= 25) rowClass = 'table-danger';
+      else if (distPct >= 20) rowClass = 'table-info';
+      else if (distPct >= 18) rowClass = 'table-success';
+      else if (distPct >= 15) rowClass = 'table-warning';
     } else if (type === 'high_yield') {
-      const yield_val = parseFloat(row.Yield) || 0;
-      if (yield_val >= 80000 && yield_val < 100000) rowClass = 'table-warning';
-      else if (yield_val >= 100000 && yield_val < 150000) rowClass = 'table-success';
-      else if (yield_val >= 150000) rowClass = 'table-info';
+      if (yield_val >= 150000) rowClass = 'table-info';
+      else if (yield_val >= 100000) rowClass = 'table-success';
+      else if (yield_val >= 80000) rowClass = 'table-warning';
     }
   }
   
+  const optionTypeClass = optionType === 'CE' ? 'success' : 'danger';
+  
   return `
-    <tr class="${rowClass}" data-key="${row.Symbol}_${row.OptionType}_${row.StrikePrice}">
-      <td><strong>${row.Symbol || ''}</strong></td>
-      <td>₹${formatNumber(row.CMP)}</td>
-      <td><span class="badge bg-${optionTypeClass}">${row.OptionType || ''}</span></td>
-      <td>₹${formatNumber(row.StrikePrice)}</td>
-      <td>₹${formatNumber(row.BidPrice)}</td>
-      <td>${row['Days Left'] || 0}</td>
-      <td>₹${formatNumber(row['Prem/Day'])}</td>
-      <td>₹${formatNumber(row['Prem Until Expiry'])}</td>
-      <td class="fw-bold">₹${formatNumber(row.Yield)}</td>
-      <td>${formatNumber(row['Dist %'])}%</td>
+    <tr class="${rowClass}">
+      <td><strong>${symbol}</strong></td>
+      <td>₹${formatNumber(cmp)}</td>
+      <td><span class="badge bg-${optionTypeClass}">${optionType}</span></td>
+      <td>₹${formatNumber(strikePrice)}</td>
+      <td>₹${formatNumber(bidPrice)}</td>
+      <td>${daysLeft}</td>
+      <td>₹${formatNumber(premDay)}</td>
+      <td>₹${formatNumber(premTotal)}</td>
+      <td class="fw-bold">₹${formatNumber(yield_val)}</td>
+      <td><strong>${formatNumber(distPct)}%</strong></td>
     </tr>
   `;
 }
 
-function applyDiffs(changes) {
-  // Apply incremental changes to existing tables
-  console.log('Applying diffs:', changes);
+function updateCounts(filteredData) {
+  const filteredCount = (filteredData.filtered && Array.isArray(filteredData.filtered)) ? filteredData.filtered.length : 0;
+  const highYieldCount = (filteredData.high_yield && Array.isArray(filteredData.high_yield)) ? filteredData.high_yield.length : 0;
   
-  // Handle filtered table changes
-  if (changes.filtered_added && changes.filtered_added.length > 0) {
-    addRows('filtered', changes.filtered_added);
-    if (soundNotifications) playNotificationSound();
-  }
-  
-  if (changes.filtered_updated && changes.filtered_updated.length > 0) {
-    updateRows('filtered', changes.filtered_updated);
-  }
-  
-  if (changes.filtered_removed && changes.filtered_removed.length > 0) {
-    removeRows('filtered', changes.filtered_removed);
-  }
-  
-  // Handle high_yield table changes
-  if (changes.high_yield_added && changes.high_yield_added.length > 0) {
-    addRows('high_yield', changes.high_yield_added);
-    if (soundNotifications) playNotificationSound();
-  }
-  
-  if (changes.high_yield_updated && changes.high_yield_updated.length > 0) {
-    updateRows('high_yield', changes.high_yield_updated);
-  }
-  
-  if (changes.high_yield_removed && changes.high_yield_removed.length > 0) {
-    removeRows('high_yield', changes.high_yield_removed);
-  }
-}
-
-function addRows(type, rows) {
-  const tbody = document.getElementById(`tbody-${type}`);
-  if (!tbody) return;
-  
-  rows.forEach(row => {
-    const rowHtml = createTableRow(row, type);
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = rowHtml;
-    const newRow = tempDiv.firstElementChild;
-    
-    // Add with animation
-    newRow.style.backgroundColor = '#ffeb3b';
-    tbody.insertBefore(newRow, tbody.firstChild);
-    
-    setTimeout(() => {
-      newRow.style.backgroundColor = '';
-    }, 2000);
-  });
-}
-
-function updateRows(type, rows) {
-  const tbody = document.getElementById(`tbody-${type}`);
-  if (!tbody) return;
-  
-  rows.forEach(row => {
-    const key = `${row.Symbol}_${row.OptionType}_${row.StrikePrice}`;
-    const existingRow = tbody.querySelector(`tr[data-key="${key}"]`);
-    
-    if (existingRow) {
-      // Update with animation
-      existingRow.style.backgroundColor = '#4caf50';
-      
-      const newRowHtml = createTableRow(row, type);
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = newRowHtml;
-      const newRow = tempDiv.firstElementChild;
-      
-      existingRow.replaceWith(newRow);
-      
-      setTimeout(() => {
-        newRow.style.backgroundColor = '';
-      }, 2000);
-    }
-  });
-}
-
-function removeRows(type, rows) {
-  const tbody = document.getElementById(`tbody-${type}`);
-  if (!tbody) return;
-  
-  rows.forEach(row => {
-    const key = `${row.Symbol}_${row.OptionType}_${row.StrikePrice}`;
-    const existingRow = tbody.querySelector(`tr[data-key="${key}"]`);
-    
-    if (existingRow) {
-      existingRow.style.backgroundColor = '#f44336';
-      setTimeout(() => {
-        existingRow.remove();
-      }, 1000);
-    }
-  });
+  document.getElementById('filteredCount').textContent = filteredCount;
+  document.getElementById('highYieldCount').textContent = highYieldCount;
 }
 
 function updateStatusBar(data) {
   document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
-  
   if (data.data && data.data.stats) {
-    const stats = data.data.stats;
-    document.getElementById('fetchTime').textContent = `${stats.last_fetch_time ? stats.last_fetch_time.toFixed(2) : '-'}s`;
+    const fetchTime = data.data.stats.last_fetch_time;
+    document.getElementById('fetchTime').textContent = fetchTime ? `${fetchTime.toFixed(1)}s` : '-';
   }
 }
 
 function formatNumber(value) {
-  if (value === null || value === undefined) return '0.00';
+  if (value === null || value === undefined || isNaN(value)) return '0.00';
   return parseFloat(value).toFixed(2);
 }
 
 function playNotificationSound() {
-  // Simple beep sound
-  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-  const oscillator = audioContext.createOscillator();
-  const gainNode = audioContext.createGain();
-  
-  oscillator.connect(gainNode);
-  gainNode.connect(audioContext.destination);
-  
-  oscillator.frequency.value = 800;
-  oscillator.type = 'sine';
-  
-  gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-  gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-  
-  oscillator.start(audioContext.currentTime);
-  oscillator.stop(audioContext.currentTime + 0.5);
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.frequency.value = 800;
+    oscillator.type = 'sine';
+    
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.5);
+  } catch (error) {
+    console.log('Sound notification failed:', error);
+  }
 }
 
 function showSettings() {
@@ -635,18 +698,16 @@ function applySettings() {
   showHighYield = document.getElementById('showHighYield').checked;
   highlightChanges = document.getElementById('highlightChanges').checked;
   soundNotifications = document.getElementById('soundNotifications').checked;
+  autoRefresh = document.getElementById('autoRefresh').checked;
   
-  // Re-render if monitoring
-  if (isMonitoring) {
-    fetchData();
+  // Refresh display if monitoring
+  if (isMonitoring && lastDisplayedData) {
+    displayData(lastDisplayedData);
   }
 }
 
-// Cleanup on page unload
 window.addEventListener('beforeunload', function() {
-  if (isMonitoring) {
-    stopMonitoring();
-  }
+  if (isMonitoring) stopMonitoring();
 });
 </script>
 
@@ -656,7 +717,7 @@ window.addEventListener('beforeunload', function() {
   overflow-y: auto;
 }
 
-.table thead {
+.sticky-top {
   position: sticky;
   top: 0;
   z-index: 10;
@@ -664,6 +725,37 @@ window.addEventListener('beforeunload', function() {
 
 tr {
   transition: background-color 0.3s ease;
+}
+
+.table-striped > tbody > tr:nth-of-type(odd) > td {
+  --bs-table-bg-type: rgba(0, 0, 0, 0.05);
+}
+
+/* Improved visual hierarchy */
+.card-header small {
+  opacity: 0.9;
+  font-size: 0.85em;
+}
+
+.table-dark th {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Better color coding */
+.table-danger td {
+  background-color: rgba(220, 53, 69, 0.1) !important;
+}
+
+.table-info td {
+  background-color: rgba(13, 202, 240, 0.1) !important;
+}
+
+.table-success td {
+  background-color: rgba(25, 135, 84, 0.1) !important;
+}
+
+.table-warning td {
+  background-color: rgba(255, 193, 7, 0.1) !important;
 }
 </style>
 
